@@ -1,0 +1,8 @@
+node_modules/
+.env
+prism.sqlite*
+storage/videos/*
+!storage/videos/.gitkeep
+dist/
+dist-server/
+*.log
