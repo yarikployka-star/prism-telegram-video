@@ -25,7 +25,10 @@ if (!token) {
 }
 
 const api = token ? `https://api.telegram.org/bot${token}` : ''
-const miniAppUrl = process.env.MINI_APP_URL
+const rawMiniAppUrl = process.env.MINI_APP_URL
+const miniAppUrl = (rawMiniAppUrl && !rawMiniAppUrl.includes('example.com')) 
+  ? rawMiniAppUrl 
+  : 'https://prism-telegram-video.onrender.com'
 let offset = 0
 let isRunning = false
 
