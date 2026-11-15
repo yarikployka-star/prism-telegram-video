@@ -21,6 +21,7 @@ import {
   setUserModel,
 } from './db.js'
 import { createVideo, AVAILABLE_MODELS } from './providers/video.js'
+import { enhancePromptWithGPT } from './providers/llm.js'
 import { startBot, handleUpdate } from './bot.js'
 
 dotenv.config()
@@ -74,6 +75,15 @@ app.post('/api/user/model', (req, res) => {
   const model = String(req.body?.model ?? 'runway').trim()
   setUserModel(userId, model)
   res.json({ ok: true, model })
+})
+
+app.post('/api/enhance-prompt', async (req, res) => {
+  const prompt = String(req.body?.prompt ?? '').trim()
+  if (!prompt || prompt.length < 2) {
+    return res.status(400).json({ error: 'Промпт слишком короткий' })
+  }
+  const enhanced = await enhancePromptWithGPT(prompt)
+  res.json({ original: prompt, enhanced })
 })
 
 app.get('/api/plans', (_req, res) => {
