@@ -19,8 +19,11 @@ import {
   createPayment,
   getUserModel,
   setUserModel,
+  getUserMode,
+  setUserMode,
 } from './db.js'
 import { createVideo, AVAILABLE_MODELS } from './providers/video.js'
+import { generateGptImage } from './providers/image.js'
 import { enhancePromptWithGPT } from './providers/llm.js'
 import { startBot, handleUpdate } from './bot.js'
 
@@ -31,9 +34,11 @@ const app = express()
 app.use(cors())
 app.use(express.json())
 
-// Serve generated videos statically
+// Serve generated videos and images statically
 const storageVideosDir = path.resolve('storage/videos')
+const storageImagesDir = path.resolve('storage/images')
 app.use('/videos', express.static(storageVideosDir))
+app.use('/images', express.static(storageImagesDir))
 
 function resolveUserId(req: Request): string {
   const tgHeader = req.headers['x-telegram-user-id']
@@ -59,9 +64,11 @@ app.get('/api/me', (req, res) => {
   const userId = resolveUserId(req)
   const user = getUser(userId) ?? getOrCreateUser(userId, null)
   const selectedModel = getUserModel(userId)
+  const currentMode = getUserMode(userId)
   res.json({
     ...user,
     selectedModel,
+    currentMode,
     models: AVAILABLE_MODELS,
   })
 })
@@ -75,6 +82,67 @@ app.post('/api/user/model', (req, res) => {
   const model = String(req.body?.model ?? 'runway').trim()
   setUserModel(userId, model)
   res.json({ ok: true, model })
+})
+
+app.post('/api/user/mode', (req, res) => {
+  const userId = resolveUserId(req)
+  const mode = req.body?.mode === 'video' ? 'video' : 'image'
+  setUserMode(userId, mode)
+  res.json({ ok: true, mode })
+})
+
+app.post('/api/generate-image', async (req, res) => {
+  const prompt = String(req.body?.prompt ?? '').trim()
+  if (prompt.length < 2 || prompt.length > 500) {
+    return res.status(400).json({ error: 'Опишите изображение минимум 2 символами.' })
+  }
+
+  const userId = resolveUserId(req)
+  const user = getUser(userId) ?? getOrCreateUser(userId, null)
+  const charge = 12
+
+  if (user.balance < charge) {
+    return res.status(402).json({ error: 'Недостаточно кристаллов. Пополните баланс.' })
+  }
+
+  const success = deductBalance(userId, charge)
+  if (!success) {
+    return res.status(402).json({ error: 'Недостаточно кристаллов. Пополните баланс.' })
+  }
+
+  const jobId = randomUUID()
+  const aspectRatio = String(req.body?.aspectRatio ?? '1:1')
+
+  createJob({
+    id: jobId,
+    userId,
+    prompt,
+    type: 'image',
+    status: 'processing',
+    aspectRatio,
+  })
+
+  try {
+    const result = await generateGptImage(jobId, prompt, { aspectRatio })
+    updateJob(jobId, {
+      status: result.status,
+      imageUrl: result.imageUrl,
+      provider: result.provider,
+    })
+    const updatedUser = getUser(userId)
+    res.status(201).json({
+      id: jobId,
+      status: result.status,
+      imageUrl: result.imageUrl,
+      provider: result.provider,
+      balance: updatedUser?.balance ?? user.balance - charge,
+    })
+  } catch (err) {
+    refundBalance(userId, charge)
+    const msg = err instanceof Error ? err.message : 'Ошибка создания изображения'
+    updateJob(jobId, { status: 'failed', errorMessage: msg })
+    res.status(500).json({ error: msg })
+  }
 })
 
 app.post('/api/enhance-prompt', async (req, res) => {
@@ -96,8 +164,10 @@ app.get('/api/jobs', (req, res) => {
   const jobs = rows.map((job) => ({
     id: job.id,
     prompt: job.prompt,
+    type: job.type ?? (job.image_url ? 'image' : 'video'),
     status: job.status,
     videoUrl: job.video_url,
+    imageUrl: job.image_url,
     duration: job.duration ?? '8 сек',
     aspectRatio: job.aspect_ratio ?? '16:9',
     quality: job.quality ?? '720p',
