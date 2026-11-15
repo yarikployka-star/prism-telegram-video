@@ -13,8 +13,10 @@ import {
   getUserJobs,
   getPlans,
   createPayment,
+  getUserModel,
+  setUserModel,
 } from './db.js'
-import { createVideo } from './providers/video.js'
+import { createVideo, AVAILABLE_MODELS } from './providers/video.js'
 
 dotenv.config()
 initDatabase()
@@ -82,10 +84,16 @@ async function sendVideo(chatId: number, filePath: string, caption: string, repl
   }
 }
 
+function getModelDisplayName(modelId: string): string {
+  const found = AVAILABLE_MODELS.find((m) => m.id === modelId)
+  return found ? found.name : 'Runway Gen-3'
+}
+
 async function setCommands() {
   await callTelegram('setMyCommands', {
     commands: [
       { command: 'start', description: '🚀 Главное меню и студия' },
+      { command: 'model', description: '🧠 Выбрать нейросеть' },
       { command: 'generate', description: '🎬 Создать видео по тексту' },
       { command: 'balance', description: '💎 Баланс кристаллов' },
       { command: 'plans', description: '📦 Тарифы и пополнение' },
@@ -96,12 +104,18 @@ async function setCommands() {
 }
 
 function getKeyboard(chatId: number) {
+  const userId = `tg_${chatId}`
+  const currentModel = getUserModel(userId)
+  const currentModelName = getModelDisplayName(currentModel)
   const inline_keyboard: any[][] = []
 
   if (miniAppUrl && /^https:\/\//i.test(miniAppUrl)) {
     inline_keyboard.push([{ text: '🚀 Открыть студию Prism', web_app: { url: miniAppUrl } }])
   }
 
+  inline_keyboard.push([
+    { text: `🧠 Модель: ${currentModelName}`, callback_data: 'cmd_model' },
+  ])
   inline_keyboard.push([
     { text: '💎 Баланс', callback_data: 'cmd_balance' },
     { text: '📦 Тарифы', callback_data: 'cmd_plans' },
@@ -112,6 +126,39 @@ function getKeyboard(chatId: number) {
   ])
 
   return { inline_keyboard }
+}
+
+async function handleModel(chatId: number) {
+  const userId = `tg_${chatId}`
+  const current = getUserModel(userId)
+
+  const text = `🧠 <b>Выбор нейросети для генерации:</b>
+
+Активная модель: <b>${getModelDisplayName(current)}</b>
+
+⚡ <b>Runway Gen-3</b> — голливудский кинематограф, реалистичный свет и плавное движение
+🔥 <b>Hailuo 02</b> — выразительная мимика, динамичные сцены и сложные полеты камеры
+🌟 <b>Google Veo 3.1</b> — новейшая видео-модель от Google DeepMind
+🚀 <b>Grok Imagine</b> — быстрая стильная генерация от xAI
+🎬 <b>Cinema Studio HD</b> — мгновенный рендер без ожидания и без водяных знаков
+
+<i>Нажмите на модель, чтобы переключить:</i>`
+
+  const inline_keyboard = [
+    [{ text: `${current === 'runway' ? '✅ ' : ''}⚡ Runway Gen-3`, callback_data: 'set_model_runway' }],
+    [{ text: `${current === 'hailuo/02-text-to-video-standard' ? '✅ ' : ''}🔥 Hailuo 02 Standard`, callback_data: 'set_model_hailuo' }],
+    [{ text: `${current === 'veo-3-1' ? '✅ ' : ''}🌟 Google Veo 3.1`, callback_data: 'set_model_veo' }],
+    [{ text: `${current === 'grok-imagine/text-to-video' ? '✅ ' : ''}🚀 Grok Imagine`, callback_data: 'set_model_grok' }],
+    [{ text: `${current === 'cinema-fast' ? '✅ ' : ''}🎬 Cinema Studio HD`, callback_data: 'set_model_cinema' }],
+    [{ text: '◀️ В главное меню', callback_data: 'cmd_start' }],
+  ]
+
+  await callTelegram('sendMessage', {
+    chat_id: chatId,
+    text,
+    parse_mode: 'HTML',
+    reply_markup: { inline_keyboard },
+  })
 }
 
 async function handleStart(chatId: number, from: { id: number; first_name?: string }) {
@@ -294,10 +341,13 @@ async function handleGenerate(chatId: number, rawPrompt: string) {
     quality: '720p',
   })
 
+  const selectedModel = getUserModel(userId)
+  const modelName = getModelDisplayName(selectedModel)
+
   // Send status notification
   const statusMsg = await callTelegram('sendMessage', {
     chat_id: chatId,
-    text: `🎬 <b>Генерация видео запущена!</b>\n\n📝 <i>«${prompt}»</i>\n⏳ Визуализируем сцену и сводим MP4... Пожалуйста, подождите несколько секунд.`,
+    text: `🎬 <b>Генерация видео запущена!</b>\n\n🧠 Модель: <b>${modelName}</b>\n📝 <i>«${prompt}»</i>\n⏳ Сводим видео высокого качества... Пожалуйста, подождите.`,
     parse_mode: 'HTML',
   })
   const statusMsgId = statusMsg?.result?.message_id
@@ -309,6 +359,7 @@ async function handleGenerate(chatId: number, rawPrompt: string) {
       aspectRatio: '9:16',
       duration: '4 сек',
       quality: '720p',
+      model: selectedModel,
     })
 
     updateJob(jobId, {
@@ -318,7 +369,7 @@ async function handleGenerate(chatId: number, rawPrompt: string) {
     })
 
     const updatedUser = getUser(userId)
-    const caption = `🎬 <b>Видео готово!</b>\n\n📝 <i>«${prompt}»</i>\n💎 Баланс: <b>${updatedUser?.balance ?? user.balance - charge}</b> кристаллов`
+    const caption = `🎬 <b>Видео готово!</b>\n\n🧠 Нейросеть: <b>${result.provider}</b>\n📝 <i>«${prompt}»</i>\n💎 Баланс: <b>${updatedUser?.balance ?? user.balance - charge}</b> кристаллов`
 
     const replyMarkup = {
       inline_keyboard: [
@@ -383,6 +434,28 @@ async function handleCallback(callback: {
     await handlePlans(chatId)
   } else if (data === 'cmd_myvideos') {
     await handleMyVideos(chatId)
+  } else if (data === 'cmd_model') {
+    await handleModel(chatId)
+  } else if (data === 'cmd_start') {
+    await handleStart(chatId, { id: chatId, first_name: callback.from.first_name })
+  } else if (data.startsWith('set_model_')) {
+    const rawModelKey = data.replace('set_model_', '')
+    let chosenModel = 'runway'
+    if (rawModelKey === 'runway') chosenModel = 'runway'
+    else if (rawModelKey === 'hailuo') chosenModel = 'hailuo/02-text-to-video-standard'
+    else if (rawModelKey === 'veo') chosenModel = 'veo-3-1'
+    else if (rawModelKey === 'grok') chosenModel = 'grok-imagine/text-to-video'
+    else if (rawModelKey === 'cinema') chosenModel = 'cinema-fast'
+
+    setUserModel(userId, chosenModel)
+    const displayName = getModelDisplayName(chosenModel)
+
+    await callTelegram('sendMessage', {
+      chat_id: chatId,
+      text: `✅ <b>Выбрана нейросеть:</b> <b>${displayName}</b>\n\nТеперь все новые видео будут генерироваться через эту модель!`,
+      parse_mode: 'HTML',
+      reply_markup: getKeyboard(chatId),
+    })
   } else if (data === 'cmd_example') {
     const examples = [
       'Неоновый мегаполис будущего под дождём, летающие автомобили',
@@ -467,6 +540,8 @@ export async function handleUpdate(update: any) {
     void handleStart(chatId, from)
   } else if (lower.startsWith('/balance') || lower === 'баланс') {
     void handleBalance(chatId)
+  } else if (lower.startsWith('/model') || lower.startsWith('/models') || lower === 'модель' || lower === 'нейросеть') {
+    void handleModel(chatId)
   } else if (lower.startsWith('/plans') || lower.startsWith('/buy') || lower === 'тарифы') {
     void handlePlans(chatId)
   } else if (lower.startsWith('/myvideos') || lower === 'мои видео') {
