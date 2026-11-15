@@ -1,17 +1,16 @@
 import { useEffect, useMemo, useState } from 'react'
 import {
-  ArrowUpRight,
   BarChart3,
-  Bell,
   Check,
   Clapperboard,
   Coins,
   Copy,
+  Crown,
   Download,
+  Flame,
   FolderArchive,
   Gem,
   Heart,
-  HelpCircle,
   Home,
   Moon,
   Palette,
@@ -22,8 +21,10 @@ import {
   Sparkles,
   Sun,
   Trophy,
+  User,
   WandSparkles,
   X,
+  Zap,
 } from 'lucide-react'
 import './styles.css'
 
@@ -80,47 +81,48 @@ export const VIDEO_MODELS: ModelOption[] = [
     id: 'cinema-fast',
     name: 'Prism Cinema HD',
     provider: 'Prism Engine + GPT-4o',
-    badge: '100% Без водяных знаков',
-    description: 'Кинематографичная генерация 25 FPS через GPT-Image без задержек и водяных знаков',
+    badge: 'No Watermark',
+    description: 'Ultra-fast 25 FPS video synthesis via GPT-Image without queues or watermarks',
   },
   {
     id: 'kleo-video',
     name: 'Kleo Studio (Seedance / Kling)',
     provider: 'Kleo AI',
-    badge: 'Ключ подключен',
-    description: 'Генерация кинематографичного видео через Kleo AI (Seedance 2.5 / Kling)',
+    badge: 'Connected',
+    description: 'Cinematic video generation via Kleo AI Studio (Seedance 2.5 / Kling)',
   },
 ]
 
 const PROMPT_SUGGESTIONS_IMAGE = [
-  '🏎️ Неоновый спорткар под дождём',
-  '🦊 Лиса в заснеженном лесу на рассвете',
-  '🌌 Киберпанк мегаполис будущего',
-  '🌊 Океанский прибой на закате',
-  '🪐 Космонавт на неизведанной планете',
+  '🏎️ Neon supercar speeding in the rain',
+  '🦊 Cute fox in a snowy sunrise forest',
+  '🌌 Futuristic cyberpunk metropolis 4k',
+  '🌊 Ocean turquoise waves crashing at sunset',
+  '🪐 Astronaut walking on an alien planet',
 ]
 
 const PROMPT_SUGGESTIONS_VIDEO = [
-  '🌌 Неоновый киберпанк город под дождём, пролёт камеры',
-  '🏎️ Ретро-спорткар на ночной автостраде 4k',
-  '🌊 Бирюзовые волны океана разбиваются о скалы',
-  '🚀 Космический корабль сквозь звёздную туманность',
-  '🦅 Парящий орёл над заснеженными вершинами гор',
+  '🌌 Cyberpunk neon city under rain, cinematic camera sweep',
+  '🏎️ Retro sports car driving on a night highway',
+  '🌊 Turquoise ocean wave crashing against cliffs 4k',
+  '🚀 Spaceship hyperdrive through a colorful nebula',
+  '🦅 Eagle soaring over snow-covered mountain peaks',
 ]
 
 const API_BASE = import.meta.env.VITE_API_URL ?? ''
 
-function getTelegramUser(): { id: string | null; name: string; initial: string } {
+function getTelegramUser(): { id: string | null; name: string; username?: string; initial: string } {
   const tgUser = window.Telegram?.WebApp?.initDataUnsafe?.user
   if (tgUser) {
-    const name = tgUser.first_name || tgUser.username || 'Пользователь'
+    const name = tgUser.first_name || tgUser.username || 'Creator'
     return {
       id: String(tgUser.id),
       name,
+      username: tgUser.username ? `@${tgUser.username}` : undefined,
       initial: name.charAt(0).toUpperCase() || 'P',
     }
   }
-  return { id: null, name: 'Гость', initial: 'P' }
+  return { id: null, name: 'Guest Creator', username: undefined, initial: 'P' }
 }
 
 async function api<T>(path: string, init?: RequestInit): Promise<T> {
@@ -135,7 +137,7 @@ async function api<T>(path: string, init?: RequestInit): Promise<T> {
 
   const response = await fetch(`${API_BASE}${path}`, { ...init, headers })
   const data = await response.json().catch(() => ({}))
-  if (!response.ok) throw new Error(data.error ?? `Ошибка API ${response.status}`)
+  if (!response.ok) throw new Error(data.error ?? `API Error ${response.status}`)
   return data as T
 }
 
@@ -148,13 +150,14 @@ export default function App() {
   const [showPlans, setShowPlans] = useState(false)
   const [showModelsModal, setShowModelsModal] = useState(false)
   const [showHelpModal, setShowHelpModal] = useState(false)
+  const [showProfileModal, setShowProfileModal] = useState(false)
   const [model, setModel] = useState('cinema-fast')
   const [mode, setMode] = useState<'image' | 'video'>('image')
   const [enhancing, setEnhancing] = useState(false)
   const [toast, setToast] = useState('')
-  const [format, setFormat] = useState<Option>({ label: 'Формат', value: '1:1' })
-  const [length, setLength] = useState<Option>({ label: 'Длина', value: '4 сек' })
-  const [quality, setQuality] = useState<Option>({ label: 'Качество', value: '720p' })
+  const [format, setFormat] = useState<Option>({ label: 'Format', value: '1:1' })
+  const [length, setLength] = useState<Option>({ label: 'Length', value: '4s' })
+  const [quality, setQuality] = useState<Option>({ label: 'Quality', value: '720p' })
   const [previewJob, setPreviewJob] = useState<Job | null>(null)
   const [previewImage, setPreviewImage] = useState<Job | null>(null)
   const [likedFeatured, setLikedFeatured] = useState(false)
@@ -187,8 +190,8 @@ export default function App() {
           setJobs(
             remote.map((job) => ({
               ...job,
-              date: job.date ? formatTime(job.date) : 'Недавно',
-              duration: job.duration ?? '4 сек',
+              date: job.date ? formatTime(job.date) : 'Just now',
+              duration: job.duration ?? '4s',
             })),
           )
         }
@@ -212,7 +215,7 @@ export default function App() {
       const d = new Date(isoStr)
       return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
     } catch {
-      return 'Недавно'
+      return 'Recent'
     }
   }
 
@@ -227,8 +230,8 @@ export default function App() {
   function switchMode(newMode: 'image' | 'video') {
     triggerHaptic('click')
     setMode(newMode)
-    setFormat(newMode === 'image' ? { label: 'Формат', value: '1:1' } : { label: 'Формат', value: '16:9' })
-    showToast(newMode === 'image' ? '🎨 Режим: Картинки (GPT-Image 2)' : '🎬 Режим: Видео (Prism Cinema HD)')
+    setFormat(newMode === 'image' ? { label: 'Format', value: '1:1' } : { label: 'Format', value: '16:9' })
+    showToast(newMode === 'image' ? '🎨 Mode: Images (GPT-Image 2)' : '🎬 Mode: Video (Prism Cinema HD)')
     void api('/api/user/mode', {
       method: 'POST',
       body: JSON.stringify({ mode: newMode }),
@@ -237,7 +240,10 @@ export default function App() {
 
   const requiredBalance = mode === 'image' ? 12 : 24
   const canGenerate = prompt.trim().length >= 2 && balance >= requiredBalance && !generating
+
   const completedCount = useMemo(() => jobs.filter((job) => job.status === 'completed').length, [jobs])
+  const imagesCount = useMemo(() => jobs.filter((j) => j.type === 'image' && j.status === 'completed').length, [jobs])
+  const videosCount = useMemo(() => jobs.filter((j) => j.type === 'video' && j.status === 'completed').length, [jobs])
 
   // Featured Item: take the latest completed job or a fallback
   const featuredItem = useMemo(() => {
@@ -255,7 +261,7 @@ export default function App() {
     setModel(modelId)
     setShowModelsModal(false)
     const m = VIDEO_MODELS.find((item) => item.id === modelId)
-    showToast(`✨ Выбрана нейросеть: ${m?.name ?? modelId}`)
+    showToast(`✨ Model: ${m?.name ?? modelId}`)
     void api('/api/user/model', {
       method: 'POST',
       body: JSON.stringify({ model: modelId }),
@@ -266,7 +272,7 @@ export default function App() {
     if (prompt.trim().length < 2 || enhancing) return
     triggerHaptic('click')
     setEnhancing(true)
-    showToast('🧠 GPT режиссирует сцену и улучшает промпт…')
+    showToast('🧠 GPT Director is expanding prompt…')
     try {
       const res = await api<{ enhanced: string }>('/api/enhance-prompt', {
         method: 'POST',
@@ -275,11 +281,11 @@ export default function App() {
       if (res.enhanced) {
         setPrompt(res.enhanced)
         triggerHaptic('success')
-        showToast('✨ Промпт улучшен GPT!')
+        showToast('✨ Prompt enhanced by GPT Director!')
       }
     } catch {
       triggerHaptic('error')
-      showToast('Не удалось улучшить промпт')
+      showToast('Could not enhance prompt')
     } finally {
       setEnhancing(false)
     }
@@ -290,7 +296,7 @@ export default function App() {
     triggerHaptic('click')
     const submittedPrompt = prompt.trim()
     setGenerating(true)
-    showToast(mode === 'image' ? '🎨 GPT-Image создаёт изображение…' : '🎬 Синтезируем сцену и генерируем видео…')
+    showToast(mode === 'image' ? '🎨 GPT-Image is painting artwork…' : '🎬 Prism is synthesizing 25 FPS video…')
 
     try {
       if (mode === 'image') {
@@ -312,12 +318,12 @@ export default function App() {
           prompt: submittedPrompt,
           type: 'image',
           status: result.status,
-          date: 'Только что',
+          date: 'Just now',
           aspectRatio: format.value,
           imageUrl: result.imageUrl,
         }
         setJobs((items) => [newJob, ...items])
-        showToast('🎉 Изображение готово!')
+        showToast('🎉 Artwork generated successfully!')
         setPreviewImage(newJob)
       } else {
         const result = await api<{ id: string; status: Job['status']; videoUrl?: string; balance: number }>(
@@ -341,19 +347,19 @@ export default function App() {
           prompt: submittedPrompt,
           type: 'video',
           status: result.status,
-          date: 'Только что',
+          date: 'Just now',
           duration: length.value,
           aspectRatio: format.value,
           quality: quality.value,
           videoUrl: result.videoUrl,
         }
         setJobs((items) => [newJob, ...items])
-        showToast('🎉 Видео готово!')
+        showToast('🎉 Video created successfully!')
         setPreviewJob(newJob)
       }
     } catch (error) {
       triggerHaptic('error')
-      showToast(error instanceof Error ? error.message : 'Не удалось создать контент')
+      showToast(error instanceof Error ? error.message : 'Generation failed')
     } finally {
       setGenerating(false)
     }
@@ -369,10 +375,10 @@ export default function App() {
       triggerHaptic('success')
       setBalance(res.newBalance ?? balance + crystals)
       setShowPlans(false)
-      showToast(`💎 ${name}: начислено +${crystals} кристаллов!`)
+      showToast(`💎 ${name}: +${crystals} crystals added!`)
     } catch {
       triggerHaptic('error')
-      showToast('Пополнение временно недоступно')
+      showToast('Payment temporarily unavailable')
     }
   }
 
@@ -390,8 +396,8 @@ export default function App() {
     setPrompt(text)
     setPreviewJob(null)
     setPreviewImage(null)
-    window.scrollTo({ top: 180, behavior: 'smooth' })
-    showToast('📝 Промпт загружен в студию')
+    window.scrollTo({ top: 160, behavior: 'smooth' })
+    showToast('📝 Prompt loaded into studio')
   }
 
   function scrollToSection(id: string) {
@@ -400,12 +406,22 @@ export default function App() {
     if (el) el.scrollIntoView({ behavior: 'smooth' })
   }
 
+  function copyReferralLink() {
+    triggerHaptic('click')
+    const botUser = 'songhude_bot'
+    const refCode = user.id ? `ref_${user.id}` : 'prism'
+    const refUrl = `https://t.me/${botUser}?start=${refCode}`
+    void navigator.clipboard.writeText(refUrl).then(() => {
+      showToast('🎁 Invite link copied to clipboard!')
+    })
+  }
+
   return (
     <div className="app-container">
       {/* TOAST NOTIFICATION */}
       {toast && (
         <div className="toast-bar">
-          <Sparkles size={15} />
+          <Sparkles size={14} />
           <span>{toast}</span>
         </div>
       )}
@@ -413,12 +429,12 @@ export default function App() {
       {/* TOPBAR FLOATING PILL */}
       <header className="topbar-pill">
         <div className="brand-wrapper">
-          <span className="brand-text">Призм AI</span>
+          <span className="brand-text">Prism AI</span>
           <span className="brand-badge">PRO</span>
         </div>
 
         <div className="top-controls">
-          <button className="balance-pill-badge" onClick={() => setShowPlans(true)} title="Баланс кристаллов">
+          <button className="balance-pill-badge" onClick={() => setShowPlans(true)} title="Crystals Balance">
             <span>💎</span>
             <span>{balance}</span>
           </button>
@@ -429,20 +445,9 @@ export default function App() {
               triggerHaptic('click')
               setShowPlans(true)
             }}
-            title="Пополнить кристаллы"
+            title="Top Up Crystals"
           >
-            <Plus size={16} />
-          </button>
-
-          <button
-            className="icon-btn-round"
-            onClick={() => {
-              triggerHaptic('click')
-              setShowHelpModal(true)
-            }}
-            title="Справка и подсказки"
-          >
-            <Bell size={16} />
+            <Plus size={15} />
           </button>
 
           <button
@@ -451,28 +456,35 @@ export default function App() {
               triggerHaptic('click')
               setDark((d) => !d)
             }}
-            title="Переключить тему"
+            title="Toggle Dark Theme"
           >
-            {dark ? <Sun size={16} /> : <Moon size={16} />}
+            {dark ? <Sun size={15} /> : <Moon size={15} />}
           </button>
 
-          <div className="user-avatar-gradient" title={user.name}>
+          <div
+            className="user-avatar-gradient"
+            onClick={() => {
+              triggerHaptic('click')
+              setShowProfileModal(true)
+            }}
+            title="Open Profile"
+          >
             <span>{user.initial}</span>
           </div>
         </div>
       </header>
 
       {/* QUICK CATEGORIES (ROW OF CIRCLES) */}
-      <section className="quick-categories" aria-label="Быстрые разделы">
+      <section className="quick-categories" aria-label="Quick Actions">
         <button
           type="button"
           className={`cat-item ${mode === 'image' ? 'active' : ''}`}
           onClick={() => switchMode('image')}
         >
           <div className="cat-circle">
-            <Palette size={22} />
+            <Palette size={20} />
           </div>
-          <span className="cat-label">Картинка</span>
+          <span className="cat-label">Images</span>
         </button>
 
         <button
@@ -481,9 +493,9 @@ export default function App() {
           onClick={() => switchMode('video')}
         >
           <div className="cat-circle">
-            <Clapperboard size={22} />
+            <Clapperboard size={20} />
           </div>
-          <span className="cat-label">Видео</span>
+          <span className="cat-label">Videos</span>
         </button>
 
         <button
@@ -493,22 +505,22 @@ export default function App() {
             if (prompt.trim().length >= 2) {
               void enhancePrompt()
             } else {
-              setPrompt('Неоновый спорткар в ночном мегаполисе будущего')
-              showToast('✨ Промпт подставлен! Нажмите ещё раз для GPT-режиссуры')
+              setPrompt('Cyberpunk neon sports car in a futuristic rainy city, volumetric smoke 4k')
+              showToast('✨ Sample prompt added! Tap again to GPT-enhance')
             }
           }}
         >
           <div className="cat-circle">
-            <WandSparkles size={22} />
+            <WandSparkles size={20} />
           </div>
-          <span className="cat-label">Режиссёр</span>
+          <span className="cat-label">Director</span>
         </button>
 
         <button type="button" className="cat-item" onClick={() => scrollToSection('history-section')}>
           <div className="cat-circle">
-            <FolderArchive size={22} />
+            <FolderArchive size={20} />
           </div>
-          <span className="cat-label">Галерея</span>
+          <span className="cat-label">Gallery</span>
         </button>
 
         <button
@@ -516,25 +528,25 @@ export default function App() {
           className="cat-item"
           onClick={() => {
             triggerHaptic('click')
-            setShowPlans(true)
+            setShowProfileModal(true)
           }}
         >
           <div className="cat-circle">
-            <Gem size={22} />
+            <User size={20} />
           </div>
-          <span className="cat-label">Тарифы</span>
+          <span className="cat-label">Profile</span>
         </button>
       </section>
 
-      {/* FEATURED CARD ("ШЕДЕВР ДНЯ") */}
+      {/* FEATURED CARD ("FEATURED CREATION") */}
       <section className="featured-card">
         <div className="featured-top">
-          <span className="featured-tag">ШЕДЕВР ДНЯ</span>
+          <span className="featured-tag">FEATURED CREATION</span>
           <div className="featured-top-right">
             <span className="stake-badge">
-              Ставка: {balance} 💎
+              💎 {balance}
             </span>
-            <div className="equalizer" title="Тренды генераций">
+            <div className="equalizer" title="Trends">
               <span className="eq-bar"></span>
               <span className="eq-bar"></span>
               <span className="eq-bar"></span>
@@ -558,17 +570,17 @@ export default function App() {
                   color: '#fff',
                 }}
               >
-                <Sparkles size={28} />
+                <Sparkles size={26} />
               </div>
             )}
           </div>
 
           <div className="featured-info">
             <h4 className="featured-title">
-              {featuredItem ? featuredItem.prompt.slice(0, 34) + (featuredItem.prompt.length > 34 ? '…' : '') : '18.10 Киберпанк'}
+              {featuredItem ? featuredItem.prompt.slice(0, 32) + (featuredItem.prompt.length > 32 ? '…' : '') : 'Cyberpunk Neon 4K'}
             </h4>
             <p className="featured-sub">
-              {featuredItem ? 'Prism AI · GPT Студия' : 'ДенКас · Prism Studio'}
+              {featuredItem ? 'Prism AI Studio' : 'DenKas · Prism Studio'}
             </p>
           </div>
 
@@ -580,12 +592,12 @@ export default function App() {
                 if (featuredItem.imageUrl) setPreviewImage(featuredItem)
                 else if (featuredItem.videoUrl) setPreviewJob(featuredItem)
               } else {
-                showToast('✨ Запустите создание своего первого шедевра ниже!')
+                showToast('✨ Start generating your own media below!')
               }
             }}
-            title="Смотреть шедевр"
+            title="View Featured Work"
           >
-            <Play size={20} fill="currentColor" />
+            <Play size={18} fill="currentColor" />
           </button>
         </div>
 
@@ -596,23 +608,23 @@ export default function App() {
               remixPrompt(
                 featuredItem
                   ? featuredItem.prompt
-                  : 'Неоновый киберпанк спорткар мчится по ночному дождливому Токио, отражения неоновых вывесок, 4k фотореализм',
+                  : 'Neon cyberpunk supercar speeding through rainy night Tokyo, glowing reflections, 4k photorealism',
               )
             }
           >
-            <Trophy size={15} />
-            <span>Поставить мою работу</span>
+            <Trophy size={14} />
+            <span>Use Prompt</span>
           </button>
 
           <button className={`like-pill-btn ${likedFeatured ? 'liked' : ''}`} onClick={toggleLike}>
-            <Heart size={15} fill={likedFeatured ? 'currentColor' : 'none'} />
+            <Heart size={14} fill={likedFeatured ? 'currentColor' : 'none'} />
             <span>{likeCount}</span>
           </button>
         </div>
       </section>
 
-      {/* CREATION STUDIO ("ПРИЗМ AI") */}
-      <div className="section-tag-heading">ПРИЗМ AI</div>
+      {/* CREATION STUDIO ("PRISM STUDIO") */}
+      <div className="section-tag-heading">PRISM STUDIO</div>
 
       <section className="studio-card" id="studio-section">
         {/* Mode Segmented Switcher */}
@@ -622,16 +634,16 @@ export default function App() {
             className={`segment-btn ${mode === 'image' ? 'active' : ''}`}
             onClick={() => switchMode('image')}
           >
-            <Palette size={15} />
-            <span>Картинка (GPT-Image)</span>
+            <Palette size={14} />
+            <span>🎨 Images (GPT)</span>
           </button>
           <button
             type="button"
             className={`segment-btn ${mode === 'video' ? 'active' : ''}`}
             onClick={() => switchMode('video')}
           >
-            <Clapperboard size={15} />
-            <span>Видео (Cinema HD)</span>
+            <Clapperboard size={14} />
+            <span>🎬 Video (HD)</span>
           </button>
         </div>
 
@@ -642,8 +654,8 @@ export default function App() {
             onChange={(e) => setPrompt(e.target.value)}
             placeholder={
               mode === 'image'
-                ? 'Опишите изображение (например: лиса в заснеженном лесу на рассвете, мягкий утренний свет, 4k)…'
-                : 'Опишите сцену (например: неоновый спорткар на ночной трассе, плавный наезд камеры, киносвет)…'
+                ? 'Describe your image (e.g. golden dragon atop misty peaks, volumetric lighting, 4k photorealism)…'
+                : 'Describe your scene (e.g. neon sports car speeding on rainy highway, cinematic camera zoom, 4k)…'
             }
             maxLength={500}
           />
@@ -653,10 +665,10 @@ export default function App() {
             className="director-enhance-btn"
             disabled={prompt.trim().length < 2 || enhancing}
             onClick={() => void enhancePrompt()}
-            title="Улучшить промпт через GPT"
+            title="Enhance prompt via GPT Director"
           >
-            <WandSparkles size={12} />
-            <span>{enhancing ? 'Режиссёр думает…' : '✨ Режиссёр'}</span>
+            <WandSparkles size={11} />
+            <span>{enhancing ? 'Director…' : '✨ Director'}</span>
           </button>
         </div>
 
@@ -679,11 +691,11 @@ export default function App() {
 
         {/* Settings row */}
         {mode === 'image' ? (
-          <div className="controls-grid" style={{ gridTemplateColumns: 'repeat(2, 1fr)' }}>
+          <div className="controls-grid" style={{ gridTemplateColumns: 'repeat(2, minmax(0, 1fr))' }}>
             <button
               type="button"
               className="control-pill-box"
-              onClick={() => cycle(format.value, ['1:1', '16:9', '9:16'], setFormat, 'Формат')}
+              onClick={() => cycle(format.value, ['1:1', '16:9', '9:16'], setFormat, 'Format')}
             >
               <span>{format.label}</span>
               <strong>{format.value}</strong>
@@ -691,9 +703,9 @@ export default function App() {
             <button
               type="button"
               className="control-pill-box"
-              onClick={() => showToast('Нейросеть: GPT-Image 2 (чистый рендер без водяных знаков)')}
+              onClick={() => showToast('Engine: GPT-Image 2 (Zero Watermarks, 4K HD)')}
             >
-              <span>Движок</span>
+              <span>Engine</span>
               <strong>GPT-Image 2</strong>
             </button>
           </div>
@@ -704,13 +716,13 @@ export default function App() {
               className="control-pill-box"
               onClick={() => setShowModelsModal(true)}
             >
-              <span>Нейросеть</span>
+              <span>Model</span>
               <strong>{VIDEO_MODELS.find((m) => m.id === model)?.name || 'Prism Cinema HD'} ▾</strong>
             </button>
             <button
               type="button"
               className="control-pill-box"
-              onClick={() => cycle(format.value, ['16:9', '9:16', '1:1'], setFormat, 'Формат')}
+              onClick={() => cycle(format.value, ['16:9', '9:16', '1:1'], setFormat, 'Format')}
             >
               <span>{format.label}</span>
               <strong>{format.value}</strong>
@@ -718,7 +730,7 @@ export default function App() {
             <button
               type="button"
               className="control-pill-box"
-              onClick={() => cycle(quality.value, ['720p', '1080p'], setQuality, 'Качество')}
+              onClick={() => cycle(quality.value, ['720p', '1080p'], setQuality, 'Quality')}
             >
               <span>{quality.label}</span>
               <strong>{quality.value}</strong>
@@ -733,31 +745,31 @@ export default function App() {
           disabled={!canGenerate}
           onClick={() => void createMedia()}
         >
-          <span>
+          <span className="btn-main-label">
             {generating
               ? mode === 'image'
-                ? '🎨 GPT рисует шедевр…'
-                : '🎬 Prism рендерит MP4…'
+                ? '🎨 GPT is generating art…'
+                : '🎬 Prism is rendering MP4…'
               : mode === 'image'
-              ? 'Сгенерировать картинку'
-              : 'Сгенерировать видео'}
+              ? 'Generate Artwork'
+              : 'Generate Video'}
           </span>
           <span className="cost-pill-tag">
-            <Coins size={14} /> {requiredBalance}
+            <Coins size={13} /> {requiredBalance} 💎
           </span>
         </button>
       </section>
 
-      {/* MY CREATIONS HISTORY */}
+      {/* MY GALLERY HISTORY */}
       <div className="section-tag-heading" id="history-section">
-        МОИ РАБОТЫ ({completedCount})
+        MY GALLERY ({completedCount})
       </div>
 
       <section className="history-card">
         {jobs.length === 0 ? (
-          <div style={{ textAlign: 'center', padding: '30px 10px', color: 'var(--text-muted)' }}>
-            <Sparkles size={32} style={{ opacity: 0.4, margin: '0 auto 10px', display: 'block' }} />
-            <p style={{ margin: 0, fontSize: 13, fontWeight: 600 }}>Здесь появятся ваши сгенерированные арты и видео</p>
+          <div style={{ textAlign: 'center', padding: '26px 10px', color: 'var(--text-muted)' }}>
+            <Sparkles size={28} style={{ opacity: 0.35, margin: '0 auto 8px', display: 'block' }} />
+            <p style={{ margin: 0, fontSize: 12.5, fontWeight: 600 }}>Your generated artworks and videos will appear here</p>
           </div>
         ) : (
           jobs.map((job) => (
@@ -777,29 +789,29 @@ export default function App() {
                   <img src={job.imageUrl} alt={job.prompt} />
                 ) : job.status === 'completed' && job.videoUrl ? (
                   <div className="job-play-circle">
-                    <Play size={12} fill="currentColor" />
+                    <Play size={11} fill="currentColor" />
                   </div>
                 ) : (
-                  <Clapperboard size={20} />
+                  <Clapperboard size={18} />
                 )}
               </div>
 
               <div className="job-details">
                 <p>{job.prompt}</p>
                 <span>
-                  {job.date} · {job.type === 'image' ? 'Картинка 4K' : job.duration || 'Видео 25 FPS'}
+                  {job.date} · {job.type === 'image' ? 'Image 4K' : job.duration || 'Video 25 FPS'}
                 </span>
               </div>
 
               <div className={`job-status-badge ${job.status}`}>
                 {job.status === 'completed' ? (
                   <>
-                    <Check size={14} /> Готово
+                    <Check size={13} /> Ready
                   </>
                 ) : job.status === 'failed' ? (
-                  'Ошибка'
+                  'Error'
                 ) : (
-                  'Рендер…'
+                  'Rendering…'
                 )}
               </div>
             </div>
@@ -809,7 +821,7 @@ export default function App() {
 
       {/* BOTTOM FLOATING DOCK */}
       <div className="dock-container">
-        <nav className="bottom-pill-dock" aria-label="Нижняя панель">
+        <nav className="bottom-pill-dock" aria-label="Bottom Navigation">
           <button
             type="button"
             className="dock-btn active"
@@ -818,8 +830,8 @@ export default function App() {
               window.scrollTo({ top: 0, behavior: 'smooth' })
             }}
           >
-            <Home size={19} />
-            <span>Главная</span>
+            <Home size={18} />
+            <span>Home</span>
           </button>
 
           <button
@@ -827,8 +839,8 @@ export default function App() {
             className={`dock-btn ${mode === 'image' ? 'active' : ''}`}
             onClick={() => switchMode('image')}
           >
-            <Palette size={19} />
-            <span>Картинка</span>
+            <Palette size={18} />
+            <span>Images</span>
           </button>
 
           <button
@@ -836,8 +848,8 @@ export default function App() {
             className={`dock-btn ${mode === 'video' ? 'active' : ''}`}
             onClick={() => switchMode('video')}
           >
-            <Clapperboard size={19} />
-            <span>Видео</span>
+            <Clapperboard size={18} />
+            <span>Video</span>
           </button>
 
           <button
@@ -845,8 +857,8 @@ export default function App() {
             className="dock-btn"
             onClick={() => scrollToSection('history-section')}
           >
-            <FolderArchive size={19} />
-            <span>Галерея</span>
+            <FolderArchive size={18} />
+            <span>Gallery</span>
           </button>
 
           <button
@@ -854,11 +866,11 @@ export default function App() {
             className="dock-btn"
             onClick={() => {
               triggerHaptic('click')
-              setShowPlans(true)
+              setShowProfileModal(true)
             }}
           >
-            <Gem size={19} />
-            <span>Тарифы</span>
+            <User size={18} />
+            <span>Profile</span>
           </button>
         </nav>
 
@@ -869,20 +881,99 @@ export default function App() {
             triggerHaptic('click')
             setShowHelpModal(true)
           }}
-          title="Справка и помощь"
+          title="Help & FAQ"
         >
           <span>?</span>
         </button>
       </div>
+
+      {/* USER PROFILE MODAL */}
+      {showProfileModal && (
+        <div className="modal-overlay" onClick={() => setShowProfileModal(false)}>
+          <div className="modal-window" onClick={(e) => e.stopPropagation()}>
+            <div className="modal-header">
+              <h3>Creator Profile</h3>
+              <button className="close-round-btn" onClick={() => setShowProfileModal(false)}>
+                <X size={16} />
+              </button>
+            </div>
+
+            <div className="profile-hero">
+              <div className="profile-avatar-large">
+                <span>{user.initial}</span>
+              </div>
+              <h4 className="profile-name">{user.name}</h4>
+              <div className="profile-badges-row">
+                {user.username && <span className="profile-pill">{user.username}</span>}
+                <span className="profile-pill gold">👑 Pro Creator</span>
+                <span className="profile-pill">⚡ Active 24/7</span>
+              </div>
+              <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>
+                ID: {user.id ? `tg_${user.id}` : 'Guest session'}
+              </span>
+            </div>
+
+            {/* Stats Grid */}
+            <div className="profile-stats-grid">
+              <div className="stat-box">
+                <strong>{imagesCount}</strong>
+                <span>Artworks</span>
+              </div>
+              <div className="stat-box">
+                <strong>{videosCount}</strong>
+                <span>Videos</span>
+              </div>
+              <div className="stat-box">
+                <strong>{balance} 💎</strong>
+                <span>Crystals</span>
+              </div>
+            </div>
+
+            {/* Quick Top-up Button inside Profile */}
+            <button
+              type="button"
+              className="btn-primary-generate"
+              style={{ height: 44, marginBottom: 14 }}
+              onClick={() => {
+                setShowProfileModal(false)
+                setShowPlans(true)
+              }}
+            >
+              <span className="btn-main-label">Top Up Crystals</span>
+              <span className="cost-pill-tag">💎 Plans</span>
+            </button>
+
+            {/* Referral / Bonuses Box */}
+            <div className="referral-card">
+              <h4>
+                <Sparkles size={14} /> Referral Bonus Program
+              </h4>
+              <p>
+                Share your personal invite link with friends and get <b>+50 💎 crystals</b> for every invited creator!
+              </p>
+              <button type="button" className="btn-copy-ref" onClick={copyReferralLink}>
+                <Copy size={13} /> Copy Invite Link
+              </button>
+            </div>
+
+            {/* System Info */}
+            <div style={{ fontSize: 11, color: 'var(--text-muted)', lineHeight: 1.5, textAlign: 'center' }}>
+              <div>🎨 Image Engine: <b>GPT-Image 2 (Zero Watermarks)</b></div>
+              <div>🎬 Video Engine: <b>Prism Cinema HD (25 FPS)</b></div>
+              <div>✨ Director: <b>GPT-4o Intelligent Prompt Engine</b></div>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* PLANS MODAL */}
       {showPlans && (
         <div className="modal-overlay" onClick={() => setShowPlans(false)}>
           <div className="modal-window" onClick={(e) => e.stopPropagation()}>
             <div className="modal-header">
-              <h3>💎 Пополнение кристаллов</h3>
+              <h3>💎 Crystal Top-Up Plans</h3>
               <button className="close-round-btn" onClick={() => setShowPlans(false)}>
-                <X size={18} />
+                <X size={16} />
               </button>
             </div>
 
@@ -890,11 +981,11 @@ export default function App() {
               <button
                 type="button"
                 className="plan-item-btn"
-                onClick={() => void choosePlan('Старт', 120, 'starter')}
+                onClick={() => void choosePlan('Starter', 120, 'starter')}
               >
                 <div className="plan-info">
-                  <strong>🔹 Старт · 120 💎</strong>
-                  <span>Хватит на 10 картинок или 5 видео</span>
+                  <strong>🔹 Starter · 120 💎</strong>
+                  <span>Enough for 10 images or 5 videos</span>
                 </div>
                 <span className="plan-price-tag">199 ₽</span>
               </button>
@@ -902,11 +993,11 @@ export default function App() {
               <button
                 type="button"
                 className="plan-item-btn"
-                onClick={() => void choosePlan('Поток', 480, 'flow')}
+                onClick={() => void choosePlan('Creator Flow', 480, 'flow')}
               >
                 <div className="plan-info">
-                  <strong>🔥 Поток · 480 💎</strong>
-                  <span>Хватит на 40 картинок или 20 видео</span>
+                  <strong>🔥 Creator Flow · 480 💎</strong>
+                  <span>Enough for 40 images or 20 videos</span>
                 </div>
                 <span className="plan-price-tag">599 ₽</span>
               </button>
@@ -914,11 +1005,11 @@ export default function App() {
               <button
                 type="button"
                 className="plan-item-btn"
-                onClick={() => void choosePlan('Студия PRO', 1200, 'studio')}
+                onClick={() => void choosePlan('Studio PRO', 1200, 'studio')}
               >
                 <div className="plan-info">
-                  <strong>🌟 Студия PRO · 1200 💎</strong>
-                  <span>Хватит на 100 картинок или 50 видео</span>
+                  <strong>🌟 Studio PRO · 1200 💎</strong>
+                  <span>Enough for 100 images or 50 videos</span>
                 </div>
                 <span className="plan-price-tag">1 299 ₽</span>
               </button>
@@ -932,9 +1023,9 @@ export default function App() {
         <div className="modal-overlay" onClick={() => setShowModelsModal(false)}>
           <div className="modal-window" onClick={(e) => e.stopPropagation()}>
             <div className="modal-header">
-              <h3>🧠 Выбор нейросети</h3>
+              <h3>🧠 Select AI Model</h3>
               <button className="close-round-btn" onClick={() => setShowModelsModal(false)}>
-                <X size={18} />
+                <X size={16} />
               </button>
             </div>
 
@@ -970,32 +1061,32 @@ export default function App() {
         <div className="modal-overlay" onClick={() => setShowHelpModal(false)}>
           <div className="modal-window" onClick={(e) => e.stopPropagation()}>
             <div className="modal-header">
-              <h3>❓ Как работает Prism Studio</h3>
+              <h3>❓ How Prism AI Works</h3>
               <button className="close-round-btn" onClick={() => setShowHelpModal(false)}>
-                <X size={18} />
+                <X size={16} />
               </button>
             </div>
 
-            <div style={{ fontSize: 13, lineHeight: 1.6, color: 'var(--text-muted)' }}>
-              <p style={{ margin: '0 0 10px', color: 'var(--text-primary)', fontWeight: 700 }}>
-                🎨 <b>Генерация картинок:</b>
+            <div style={{ fontSize: 12.5, lineHeight: 1.6, color: 'var(--text-muted)' }}>
+              <p style={{ margin: '0 0 8px', color: 'var(--text-primary)', fontWeight: 700 }}>
+                🎨 <b>AI Image Generation:</b>
               </p>
-              <p style={{ margin: '0 0 14px' }}>
-                Использует модель <b>GPT-Image 2</b> на базе официального ключа. Создаёт детализированные изображения 1024x1024 без водяных знаков всего за 12 кристаллов.
-              </p>
-
-              <p style={{ margin: '0 0 10px', color: 'var(--text-primary)', fontWeight: 700 }}>
-                🎬 <b>Генерация видео:</b>
-              </p>
-              <p style={{ margin: '0 0 14px' }}>
-                Движок <b>Prism Cinema HD</b> синтезирует высокодетализированную сцену и собирает 25 FPS MP4-ролик с плавным кинематографичным движением камеры.
+              <p style={{ margin: '0 0 12px' }}>
+                Powered by <b>GPT-Image 2</b>. Creates crisp high-resolution artworks with zero watermarks for only 12 crystals.
               </p>
 
-              <p style={{ margin: '0 0 10px', color: 'var(--text-primary)', fontWeight: 700 }}>
-                ✨ <b>GPT Режиссёр:</b>
+              <p style={{ margin: '0 0 8px', color: 'var(--text-primary)', fontWeight: 700 }}>
+                🎬 <b>AI Video Synthesis:</b>
+              </p>
+              <p style={{ margin: '0 0 12px' }}>
+                <b>Prism Cinema HD</b> renders high-detail scene imagery and encodes a smooth 25 FPS MP4 video with cinematic camera motions.
+              </p>
+
+              <p style={{ margin: '0 0 8px', color: 'var(--text-primary)', fontWeight: 700 }}>
+                ✨ <b>GPT Director:</b>
               </p>
               <p style={{ margin: 0 }}>
-                Нажмите кнопку «✨ Режиссёр», и нейросеть автоматически доработает вашу краткую идею до профессионального кино-сценария!
+                Tap the «✨ Director» button to automatically turn a short phrase into an epic cinematic production prompt!
               </p>
             </div>
           </div>
@@ -1007,11 +1098,11 @@ export default function App() {
         <div className="modal-overlay" onClick={() => setPreviewImage(null)}>
           <div className="modal-window" onClick={(e) => e.stopPropagation()}>
             <div className="modal-header">
-              <h3 style={{ fontSize: 15, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+              <h3 style={{ fontSize: 14, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
                 🎨 {previewImage.prompt}
               </h3>
               <button className="close-round-btn" onClick={() => setPreviewImage(null)}>
-                <X size={18} />
+                <X size={16} />
               </button>
             </div>
 
@@ -1026,7 +1117,7 @@ export default function App() {
                 className="preview-action-btn primary"
                 onClick={() => triggerHaptic('click')}
               >
-                <Download size={15} /> Скачать
+                <Download size={14} /> Download
               </a>
 
               <button
@@ -1035,10 +1126,10 @@ export default function App() {
                 onClick={() => {
                   triggerHaptic('click')
                   void navigator.clipboard.writeText(previewImage.prompt)
-                  showToast('📝 Промпт скопирован в буфер!')
+                  showToast('📝 Prompt copied to clipboard!')
                 }}
               >
-                <Copy size={15} /> Промпт
+                <Copy size={14} /> Copy
               </button>
 
               <button
@@ -1046,7 +1137,7 @@ export default function App() {
                 className="preview-action-btn"
                 onClick={() => remixPrompt(previewImage.prompt)}
               >
-                <Sparkles size={15} /> Повторить
+                <Sparkles size={14} /> Remix
               </button>
             </div>
           </div>
@@ -1058,11 +1149,11 @@ export default function App() {
         <div className="modal-overlay" onClick={() => setPreviewJob(null)}>
           <div className="modal-window" onClick={(e) => e.stopPropagation()}>
             <div className="modal-header">
-              <h3 style={{ fontSize: 15, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+              <h3 style={{ fontSize: 14, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
                 🎬 {previewJob.prompt}
               </h3>
               <button className="close-round-btn" onClick={() => setPreviewJob(null)}>
-                <X size={18} />
+                <X size={16} />
               </button>
             </div>
 
@@ -1077,7 +1168,7 @@ export default function App() {
                 className="preview-action-btn primary"
                 onClick={() => triggerHaptic('click')}
               >
-                <Download size={15} /> Скачать MP4
+                <Download size={14} /> Download MP4
               </a>
 
               <button
@@ -1089,10 +1180,10 @@ export default function App() {
                     ? previewJob.videoUrl
                     : `${window.location.origin}${previewJob.videoUrl}`
                   void navigator.clipboard.writeText(fullUrl || '')
-                  showToast('🔗 Ссылка скопирована!')
+                  showToast('🔗 Link copied!')
                 }}
               >
-                <Copy size={15} /> Ссылка
+                <Copy size={14} /> Link
               </button>
 
               <button
@@ -1100,7 +1191,7 @@ export default function App() {
                 className="preview-action-btn"
                 onClick={() => remixPrompt(previewJob.prompt)}
               >
-                <Sparkles size={15} /> Повторить
+                <Sparkles size={14} /> Remix
               </button>
             </div>
           </div>

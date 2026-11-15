@@ -146,7 +146,7 @@ function getKeyboard(chatId: number) {
   const inline_keyboard: any[][] = []
 
   if (miniAppUrl && /^https:\/\//i.test(miniAppUrl)) {
-    inline_keyboard.push([{ text: '🚀 Открыть Web-студию Prism', web_app: { url: miniAppUrl } }])
+    inline_keyboard.push([{ text: '🚀 Open Prism AI Studio', web_app: { url: miniAppUrl } }])
   }
 
   const modeBtnText = currentMode === 'image' 
