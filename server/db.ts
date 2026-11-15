@@ -10,6 +10,7 @@ export interface UserRow {
   id: string
   telegram_id: string | null
   balance: number
+  selected_model?: string
   created_at: string
 }
 
@@ -42,6 +43,7 @@ export function initDatabase() {
       id TEXT PRIMARY KEY,
       telegram_id TEXT UNIQUE,
       balance INTEGER NOT NULL DEFAULT 240,
+      selected_model TEXT DEFAULT 'runway',
       created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
     );
 
@@ -110,6 +112,13 @@ export function initDatabase() {
   }
   if (!columnNames.has('error_message')) {
     try { db.exec("ALTER TABLE jobs ADD COLUMN error_message TEXT") } catch {}
+  }
+
+  // Migrate users table columns if needed
+  const existingUserColumns = db.prepare("PRAGMA table_info(users)").all() as Array<{ name: string }>
+  const userColNames = new Set(existingUserColumns.map((c) => c.name))
+  if (!userColNames.has('selected_model')) {
+    try { db.exec("ALTER TABLE users ADD COLUMN selected_model TEXT DEFAULT 'runway'") } catch {}
   }
 
   // Re-check payments table check constraint for 'demo'
@@ -284,4 +293,21 @@ export function createPayment(params: {
     params.currency ?? 'RUB',
     params.status ?? 'pending',
   )
+}
+
+export function getUserModel(userId: string): string {
+  try {
+    const row = db.prepare('SELECT selected_model FROM users WHERE id = ?').get(userId) as { selected_model?: string } | undefined
+    return row?.selected_model || 'runway'
+  } catch {
+    return 'runway'
+  }
+}
+
+export function setUserModel(userId: string, model: string): void {
+  try {
+    db.prepare('UPDATE users SET selected_model = ? WHERE id = ?').run(model, userId)
+  } catch (err) {
+    console.error('Error setting user model:', err)
+  }
 }
