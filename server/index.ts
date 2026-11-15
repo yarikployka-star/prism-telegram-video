@@ -17,8 +17,10 @@ import {
   getUserJobs,
   getPlans,
   createPayment,
+  getUserModel,
+  setUserModel,
 } from './db.js'
-import { createVideo } from './providers/video.js'
+import { createVideo, AVAILABLE_MODELS } from './providers/video.js'
 import { startBot, handleUpdate } from './bot.js'
 
 dotenv.config()
@@ -54,8 +56,24 @@ app.get('/api/health', (_req, res) => res.json({ ok: true, timestamp: Date.now()
 
 app.get('/api/me', (req, res) => {
   const userId = resolveUserId(req)
-  const user = getUser(userId)
-  res.json(user ?? { id: userId, balance: 240 })
+  const user = getUser(userId) ?? getOrCreateUser(userId, null)
+  const selectedModel = getUserModel(userId)
+  res.json({
+    ...user,
+    selectedModel,
+    models: AVAILABLE_MODELS,
+  })
+})
+
+app.get('/api/models', (_req, res) => {
+  res.json(AVAILABLE_MODELS)
+})
+
+app.post('/api/user/model', (req, res) => {
+  const userId = resolveUserId(req)
+  const model = String(req.body?.model ?? 'runway').trim()
+  setUserModel(userId, model)
+  res.json({ ok: true, model })
 })
 
 app.get('/api/plans', (_req, res) => {
@@ -115,7 +133,9 @@ app.post('/api/generate', async (req, res) => {
   }
 
   const jobId = randomUUID()
-  const duration = String(req.body?.duration ?? '8 сек')
+  const userModel = getUserModel(userId)
+  const model = String(req.body?.model ?? userModel ?? 'runway').trim()
+  const duration = String(req.body?.duration ?? '4 сек')
   const aspectRatio = String(req.body?.aspectRatio ?? '16:9')
   const quality = String(req.body?.quality ?? '720p')
 
@@ -134,6 +154,7 @@ app.post('/api/generate', async (req, res) => {
       aspectRatio,
       duration,
       quality,
+      model,
     })
 
     updateJob(jobId, {
