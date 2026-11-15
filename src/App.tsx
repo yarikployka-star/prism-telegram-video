@@ -141,6 +141,7 @@ function App() {
   const [showPlans, setShowPlans] = useState(false)
   const [showModelsModal, setShowModelsModal] = useState(false)
   const [model, setModel] = useState('runway')
+  const [enhancing, setEnhancing] = useState(false)
   const [toast, setToast] = useState('')
   const [format, setFormat] = useState<Option>({ label: 'Формат', value: '16:9' })
   const [length, setLength] = useState<Option>({ label: 'Длина', value: '4 сек' })
@@ -220,6 +221,29 @@ function App() {
       method: 'POST',
       body: JSON.stringify({ model: modelId }),
     }).catch(() => undefined)
+  }
+
+  async function enhancePrompt() {
+    if (prompt.trim().length < 2 || enhancing) return
+    triggerHaptic('click')
+    setEnhancing(true)
+    setToast('🧠 GPT режиссирует сцену и улучшает промпт…')
+    try {
+      const res = await api<{ enhanced: string }>('/api/enhance-prompt', {
+        method: 'POST',
+        body: JSON.stringify({ prompt: prompt.trim() }),
+      })
+      if (res.enhanced) {
+        setPrompt(res.enhanced)
+        triggerHaptic('success')
+        setToast('✨ Промпт улучшен GPT!')
+      }
+    } catch {
+      triggerHaptic('error')
+      setToast('Не удалось улучшить промпт')
+    } finally {
+      setEnhancing(false)
+    }
   }
 
   async function createVideo() {
@@ -362,9 +386,15 @@ function App() {
         />
         <div className="composer-footer">
           <span>{prompt.length} / 500</span>
-          <span className="hint">
-            <WandSparkles size={14} /> Опишите движение камеры, объект и свет
-          </span>
+          <button
+            type="button"
+            className="enhance-btn"
+            disabled={prompt.trim().length < 2 || enhancing}
+            onClick={() => void enhancePrompt()}
+            title="Улучшить промпт с помощью GPT-5"
+          >
+            <Sparkles size={13} /> {enhancing ? 'GPT улучшает…' : '✨ GPT Режиссёр'}
+          </button>
         </div>
       </section>
 
