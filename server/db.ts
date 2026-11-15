@@ -321,9 +321,20 @@ export function createPayment(params: {
 export function getUserModel(userId: string): string {
   try {
     const row = db.prepare('SELECT selected_model FROM users WHERE id = ?').get(userId) as { selected_model?: string } | undefined
-    return row?.selected_model || 'runway'
+    const model = row?.selected_model
+    if (
+      !model ||
+      model === 'runway' ||
+      model.startsWith('fal-ai') ||
+      model.startsWith('hailuo') ||
+      model.startsWith('veo') ||
+      model.startsWith('grok')
+    ) {
+      return 'cinema-fast'
+    }
+    return model
   } catch {
-    return 'runway'
+    return 'cinema-fast'
   }
 }
 

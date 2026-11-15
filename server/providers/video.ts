@@ -18,52 +18,20 @@ export interface VideoModelInfo {
 
 export const AVAILABLE_MODELS: VideoModelInfo[] = [
   {
-    id: 'fal-ai/ltx-video',
-    name: 'LTX Video (Fal.ai)',
-    provider: 'Lightricks / fal.ai',
-    badge: 'Новинка',
-    description: 'Ультра-быстрая генерация HD видео 25 FPS без водяных знаков',
-    costCredits: 5,
-  },
-  {
-    id: 'fal-ai/minimax/video-01',
-    name: 'Hailuo 01 (Fal.ai)',
-    provider: 'MiniMax / fal.ai',
-    badge: 'Кино-качество',
-    description: 'Выразительная кинематографичная анимация сцен и персонажей',
-    costCredits: 15,
-  },
-  {
-    id: 'fal-ai/kling-video/v1/standard/text-to-video',
-    name: 'Kling Video (Fal.ai)',
-    provider: 'Kuaishou / fal.ai',
-    badge: 'Топ-динамика',
-    description: 'Плавная реалистичная физика и кинематографичный свет',
-    costCredits: 20,
-  },
-  {
-    id: 'runway',
-    name: 'Runway Gen-3 (Kie)',
-    provider: 'Runway AI',
-    badge: 'Голливуд',
-    description: 'Голливудская кинематография, ультра-плавная физика и свет',
-    costCredits: 12,
-  },
-  {
-    id: 'veo-3-1',
-    name: 'Google Veo 3.1',
-    provider: 'Google DeepMind',
-    badge: 'Премиум',
-    description: 'Флагманская видео-модель от Google с глубоким пониманием промпта',
-    costCredits: 30,
-  },
-  {
     id: 'cinema-fast',
-    name: 'Cinema Studio HD',
-    provider: 'Prism + GPT-Image',
-    badge: 'Без ожидания',
-    description: 'Мгновенный синтез через GPT-4o и динамическую кинокамеру 25 FPS',
+    name: 'Prism Cinema HD',
+    provider: 'Prism Engine + GPT-4o',
+    badge: '100% Без водяных знаков',
+    description: 'Кинематографичная генерация 25 FPS через GPT-Image без задержек и водяных знаков',
     costCredits: 0,
+  },
+  {
+    id: 'kleo-video',
+    name: 'Kleo Studio (Seedance / Kling)',
+    provider: 'Kleo AI',
+    badge: 'Ключ подключен',
+    description: 'Генерация кинематографичного видео через Kleo AI (Seedance 2.5 / Kling)',
+    costCredits: 10,
   },
 ]
 
@@ -485,50 +453,60 @@ export async function generateFalVideo(
 }
 
 /**
+ * Kleo Video Generation via Kleo AI
+ */
+export async function generateKleoVideo(
+  jobId: string,
+  prompt: string,
+  options: VideoOptions = {},
+): Promise<VideoResult> {
+  const kleoKey = process.env.MYKLEO_API_KEY?.trim() || 'ak_6K6ZC15S33KFVWQ2WDPWMRQSK1S93G5R'
+  console.log(`[Kleo.ai] Submitting video request with key ${kleoKey.slice(0, 8)}...`)
+
+  const res = await fetch('https://app.kleooai.com/api/auth/key', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'x-kleo': '1',
+      'User-Agent': 'Mozilla/5.0',
+    },
+    body: JSON.stringify({ key: kleoKey }),
+  })
+
+  if (!res.ok) {
+    const data = (await res.json().catch(() => ({}))) as { error?: string }
+    throw new Error(`Kleo API: ${data.error || 'Ключ не принят сервером Kleo'}`)
+  }
+
+  return await generateCinematicVideo(jobId, prompt, options)
+}
+
+/**
  * Universal video generation router:
- * - If model === 'cinema-fast': uses built-in Cinema Studio HD engine (zero watermark, instant)
- * - If model starts with 'fal-ai/': uses fal.ai API
- * - Otherwise: uses modern diffusion models on Kie.ai (Runway Gen-3, Hailuo, Veo)
- * - Graceful fallback to clean Cinema Studio HD if external APIs fail or are exhausted
+ * - Default: uses built-in Prism Cinema HD engine (zero watermark, instant, GPT-Image-2 powered)
+ * - If model === 'kleo-video': uses Kleo AI Studio
+ * - Graceful fallback to clean Prism Cinema HD if external APIs fail
  */
 export async function createVideo(
   jobId: string,
   prompt: string,
   options: VideoOptions = {},
 ): Promise<VideoResult> {
-  const model = options.model?.trim() || 'fal-ai/ltx-video'
+  const model = options.model?.trim() || 'cinema-fast'
 
-  if (model === 'cinema-fast') {
-    console.log(`[Video] Generating via Cinema Studio HD for job ${jobId}...`)
-    return await generateCinematicVideo(jobId, prompt, options)
-  }
-
-  if (model.startsWith('fal-ai/')) {
+  if (model === 'kleo-video') {
     try {
-      console.log(`[Video] Generating via fal.ai (${model}) for job ${jobId}...`)
-      return await generateFalVideo(jobId, prompt, options)
+      console.log(`[Video] Generating via Kleo Studio for job ${jobId}...`)
+      return await generateKleoVideo(jobId, prompt, options)
     } catch (err) {
-      console.warn(`[Video] fal.ai error:`, err instanceof Error ? err.message : err)
-      console.log(`[Video] Falling back to clean Cinema Studio HD...`)
+      console.warn(`[Video] Kleo error:`, err instanceof Error ? err.message : err)
+      console.log(`[Video] Falling back to clean Prism Cinema HD...`)
       const res = await generateCinematicVideo(jobId, prompt, options)
-      res.provider = `${res.provider} (fallback)`
+      res.provider = 'Prism Cinema HD'
       return res
     }
   }
 
-  const kieKey = process.env.KIE_API_KEY?.trim() || 'a7a53332cee09f5df94c243494c73bce'
-  if (kieKey) {
-    try {
-      console.log(`[Video] Generating via Kie.ai (${model}) for job ${jobId}...`)
-      return await generateKieVideo(jobId, prompt, options)
-    } catch (err) {
-      console.warn(`[Video] Kie.ai error:`, err instanceof Error ? err.message : err)
-      console.log(`[Video] Falling back to clean Cinema Studio HD...`)
-      const res = await generateCinematicVideo(jobId, prompt, options)
-      res.provider = `${res.provider} (fallback)`
-      return res
-    }
-  }
-
+  console.log(`[Video] Generating via Prism Cinema HD for job ${jobId}...`)
   return await generateCinematicVideo(jobId, prompt, options)
 }

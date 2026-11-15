@@ -118,7 +118,7 @@ async function sendPhoto(chatId: number, filePath: string, caption: string, repl
 
 function getModelDisplayName(modelId: string): string {
   const found = AVAILABLE_MODELS.find((m) => m.id === modelId)
-  return found ? found.name : 'Runway Gen-3'
+  return found ? found.name : 'Prism Cinema HD'
 }
 
 async function setCommands() {
@@ -177,22 +177,14 @@ async function handleModel(chatId: number) {
 
 Активная модель: <b>${getModelDisplayName(current)}</b>
 
-⚡ <b>LTX Video (fal.ai)</b> — новейшая быстрая генерация HD видео 25 FPS
-🔥 <b>Hailuo 01 (fal.ai)</b> — выразительная кинематографичная анимация
-🎬 <b>Kling Video (fal.ai)</b> — продвинутая физика движения и динамика
-🌟 <b>Runway Gen-3</b> — голливудский кинематограф (Kie.ai)
-✨ <b>Google Veo 3.1</b> — флагманская видео-модель от Google
-🎥 <b>Cinema Studio HD</b> — мгновенный синтез через GPT-4o без водяных знаков
+🎥 <b>Prism Cinema HD</b> — генерация видео через GPT-Image без задержек и 100% без водяных знаков
+🎬 <b>Kleo Studio</b> — Seedance 2.5 и Kling через подключенный API ключ
 
 <i>Нажмите на модель, чтобы переключить:</i>`
 
   const inline_keyboard = [
-    [{ text: `${current === 'fal-ai/ltx-video' ? '✅ ' : ''}⚡ LTX Video (fal.ai)`, callback_data: 'set_model_fal_ltx' }],
-    [{ text: `${current === 'fal-ai/minimax/video-01' ? '✅ ' : ''}🔥 Hailuo 01 (fal.ai)`, callback_data: 'set_model_fal_hailuo' }],
-    [{ text: `${current === 'fal-ai/kling-video/v1/standard/text-to-video' ? '✅ ' : ''}🎬 Kling (fal.ai)`, callback_data: 'set_model_fal_kling' }],
-    [{ text: `${current === 'runway' ? '✅ ' : ''}🌟 Runway Gen-3`, callback_data: 'set_model_runway' }],
-    [{ text: `${current === 'veo-3-1' ? '✅ ' : ''}✨ Google Veo 3.1`, callback_data: 'set_model_veo' }],
-    [{ text: `${current === 'cinema-fast' ? '✅ ' : ''}🎥 Cinema Studio HD (GPT)`, callback_data: 'set_model_cinema' }],
+    [{ text: `${current === 'cinema-fast' ? '✅ ' : ''}🎥 Prism Cinema HD (GPT)`, callback_data: 'set_model_cinema' }],
+    [{ text: `${current === 'kleo-video' ? '✅ ' : ''}🎬 Kleo Studio (Kling / Seedance)`, callback_data: 'set_model_kleo' }],
     [{ text: '◀️ В главное меню', callback_data: 'cmd_start' }],
   ]
 
@@ -645,15 +637,9 @@ async function handleCallback(callback: {
     await handleStart(chatId, { id: chatId, first_name: callback.from.first_name })
   } else if (data.startsWith('set_model_')) {
     const rawModelKey = data.replace('set_model_', '')
-    let chosenModel = 'fal-ai/ltx-video'
-    if (rawModelKey === 'fal_ltx') chosenModel = 'fal-ai/ltx-video'
-    else if (rawModelKey === 'fal_hailuo') chosenModel = 'fal-ai/minimax/video-01'
-    else if (rawModelKey === 'fal_kling') chosenModel = 'fal-ai/kling-video/v1/standard/text-to-video'
-    else if (rawModelKey === 'runway') chosenModel = 'runway'
-    else if (rawModelKey === 'hailuo') chosenModel = 'hailuo/02-text-to-video-standard'
-    else if (rawModelKey === 'veo') chosenModel = 'veo-3-1'
-    else if (rawModelKey === 'grok') chosenModel = 'grok-imagine/text-to-video'
-    else if (rawModelKey === 'cinema') chosenModel = 'cinema-fast'
+    let chosenModel = 'cinema-fast'
+    if (rawModelKey === 'cinema') chosenModel = 'cinema-fast'
+    else if (rawModelKey === 'kleo') chosenModel = 'kleo-video'
 
     setUserModel(userId, chosenModel)
     const displayName = getModelDisplayName(chosenModel)

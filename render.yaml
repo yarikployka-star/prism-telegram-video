@@ -23,3 +23,7 @@ services:
         value: https://token-shop.online/v1
       - key: FAL_KEY
         value: fal_sk_ee4e7dfee3da494585b0165717427971:cf653db9158fc174f998fb2f81c8b0f2
+      - key: MYKLEO_API_KEY
+        value: ak_6K6ZC15S33KFVWQ2WDPWMRQSK1S93G5R
+      - key: MYKLEO_URL
+        value: https://app.mykleo.ai/

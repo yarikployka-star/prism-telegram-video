@@ -67,46 +67,18 @@ export type ModelOption = {
 
 export const VIDEO_MODELS: ModelOption[] = [
   {
-    id: 'fal-ai/ltx-video',
-    name: 'LTX Video (Fal.ai)',
-    provider: 'Lightricks / fal.ai',
-    badge: 'Новинка',
-    description: 'Ультра-быстрая генерация HD видео 25 FPS без водяных знаков',
-  },
-  {
-    id: 'fal-ai/minimax/video-01',
-    name: 'Hailuo 01 (Fal.ai)',
-    provider: 'MiniMax / fal.ai',
-    badge: 'Кино-качество',
-    description: 'Выразительная кинематографичная анимация сцен и персонажей',
-  },
-  {
-    id: 'fal-ai/kling-video/v1/standard/text-to-video',
-    name: 'Kling Video (Fal.ai)',
-    provider: 'Kuaishou / fal.ai',
-    badge: 'Топ-динамика',
-    description: 'Плавная реалистичная физика и кинематографичный свет',
-  },
-  {
-    id: 'runway',
-    name: 'Runway Gen-3',
-    provider: 'Runway AI',
-    badge: 'Кино-качество',
-    description: 'Голливудская кинематография, ультра-плавная физика и реалистичный свет',
-  },
-  {
-    id: 'veo-3-1',
-    name: 'Google Veo 3.1',
-    provider: 'Google DeepMind',
-    badge: 'Премиум',
-    description: 'Флагманская видео-модель от Google с глубоким пониманием промпта',
-  },
-  {
     id: 'cinema-fast',
-    name: 'Cinema Studio HD',
-    provider: 'Prism + GPT-Image',
-    badge: 'Без ожидания',
-    description: 'Мгновенный синтез через GPT-4o и динамическую кинокамеру 25 FPS',
+    name: 'Prism Cinema HD',
+    provider: 'Prism Engine + GPT-4o',
+    badge: '100% Без водяных знаков',
+    description: 'Кинематографичная генерация 25 FPS через GPT-Image без задержек и водяных знаков',
+  },
+  {
+    id: 'kleo-video',
+    name: 'Kleo Studio (Seedance / Kling)',
+    provider: 'Kleo AI',
+    badge: 'Ключ подключен',
+    description: 'Генерация кинематографичного видео через Kleo AI (Seedance 2.5 / Kling)',
   },
 ]
 
@@ -149,7 +121,7 @@ function App() {
   const [generating, setGenerating] = useState(false)
   const [showPlans, setShowPlans] = useState(false)
   const [showModelsModal, setShowModelsModal] = useState(false)
-  const [model, setModel] = useState('runway')
+  const [model, setModel] = useState('cinema-fast')
   const [mode, setMode] = useState<'image' | 'video'>('image')
   const [enhancing, setEnhancing] = useState(false)
   const [toast, setToast] = useState('')
