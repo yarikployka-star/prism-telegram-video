@@ -11,6 +11,7 @@ export interface UserRow {
   telegram_id: string | null
   balance: number
   selected_model?: string
+  current_mode?: 'image' | 'video'
   created_at: string
 }
 
@@ -19,7 +20,9 @@ export interface JobRow {
   user_id: string
   prompt: string
   status: 'queued' | 'processing' | 'completed' | 'failed'
+  type?: 'video' | 'image'
   video_url: string | null
+  image_url?: string | null
   duration: string | null
   aspect_ratio: string | null
   quality: string | null
@@ -113,12 +116,21 @@ export function initDatabase() {
   if (!columnNames.has('error_message')) {
     try { db.exec("ALTER TABLE jobs ADD COLUMN error_message TEXT") } catch {}
   }
+  if (!columnNames.has('type')) {
+    try { db.exec("ALTER TABLE jobs ADD COLUMN type TEXT DEFAULT 'video'") } catch {}
+  }
+  if (!columnNames.has('image_url')) {
+    try { db.exec("ALTER TABLE jobs ADD COLUMN image_url TEXT") } catch {}
+  }
 
   // Migrate users table columns if needed
   const existingUserColumns = db.prepare("PRAGMA table_info(users)").all() as Array<{ name: string }>
   const userColNames = new Set(existingUserColumns.map((c) => c.name))
   if (!userColNames.has('selected_model')) {
     try { db.exec("ALTER TABLE users ADD COLUMN selected_model TEXT DEFAULT 'runway'") } catch {}
+  }
+  if (!userColNames.has('current_mode')) {
+    try { db.exec("ALTER TABLE users ADD COLUMN current_mode TEXT DEFAULT 'image'") } catch {}
   }
 
   // Re-check payments table check constraint for 'demo'
@@ -200,19 +212,25 @@ export function createJob(params: {
   userId: string
   prompt: string
   status?: JobRow['status']
+  type?: 'video' | 'image'
+  videoUrl?: string | null
+  imageUrl?: string | null
   duration?: string
   aspectRatio?: string
   quality?: string
   provider?: string
 }) {
   db.prepare(`
-    INSERT INTO jobs (id, user_id, prompt, status, duration, aspect_ratio, quality, provider)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+    INSERT INTO jobs (id, user_id, prompt, status, type, video_url, image_url, duration, aspect_ratio, quality, provider)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `).run(
     params.id,
     params.userId,
     params.prompt,
     params.status ?? 'processing',
+    params.type ?? 'video',
+    params.videoUrl ?? null,
+    params.imageUrl ?? null,
     params.duration ?? '8 сек',
     params.aspectRatio ?? '16:9',
     params.quality ?? '720p',
@@ -225,6 +243,7 @@ export function updateJob(
   data: {
     status?: JobRow['status']
     videoUrl?: string | null
+    imageUrl?: string | null
     provider?: string | null
     providerJobId?: string | null
     errorMessage?: string | null
@@ -240,6 +259,10 @@ export function updateJob(
   if (data.videoUrl !== undefined) {
     updates.push('video_url = ?')
     values.push(data.videoUrl)
+  }
+  if (data.imageUrl !== undefined) {
+    updates.push('image_url = ?')
+    values.push(data.imageUrl)
   }
   if (data.provider !== undefined) {
     updates.push('provider = ?')
@@ -309,5 +332,22 @@ export function setUserModel(userId: string, model: string): void {
     db.prepare('UPDATE users SET selected_model = ? WHERE id = ?').run(model, userId)
   } catch (err) {
     console.error('Error setting user model:', err)
+  }
+}
+
+export function getUserMode(userId: string): 'image' | 'video' {
+  try {
+    const row = db.prepare('SELECT current_mode FROM users WHERE id = ?').get(userId) as { current_mode?: string } | undefined
+    return row?.current_mode === 'video' ? 'video' : 'image'
+  } catch {
+    return 'image'
+  }
+}
+
+export function setUserMode(userId: string, mode: 'image' | 'video'): void {
+  try {
+    db.prepare('UPDATE users SET current_mode = ? WHERE id = ?').run(mode, userId)
+  } catch (err) {
+    console.error('Error setting user mode:', err)
   }
 }
