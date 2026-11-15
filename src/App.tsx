@@ -55,6 +55,52 @@ type Job = {
 
 type Option = { label: string; value: string }
 
+export type ModelOption = {
+  id: string
+  name: string
+  provider: string
+  badge: string
+  description: string
+}
+
+export const VIDEO_MODELS: ModelOption[] = [
+  {
+    id: 'runway',
+    name: 'Runway Gen-3',
+    provider: 'Runway AI',
+    badge: 'Кино-качество',
+    description: 'Голливудская кинематография, ультра-плавная физика и реалистичный свет',
+  },
+  {
+    id: 'hailuo/02-text-to-video-standard',
+    name: 'Hailuo 02',
+    provider: 'MiniMax',
+    badge: 'Живая динамика',
+    description: 'Выразительные персонажи, сложные движения камеры и высокая детализация',
+  },
+  {
+    id: 'veo-3-1',
+    name: 'Google Veo 3.1',
+    provider: 'Google DeepMind',
+    badge: 'Новинка',
+    description: 'Флагманская видео-модель от Google с глубоким пониманием промпта',
+  },
+  {
+    id: 'grok-imagine/text-to-video',
+    name: 'Grok Imagine',
+    provider: 'xAI',
+    badge: 'Креатив',
+    description: 'Быстрая стильная генерация с яркими визуальными эффектами',
+  },
+  {
+    id: 'cinema-fast',
+    name: 'Cinema Studio HD',
+    provider: 'Prism Engine',
+    badge: 'Без ожидания',
+    description: 'Мгновенный синтез 25 FPS без водяных знаков и очередей',
+  },
+]
+
 const PROMPT_SUGGESTIONS = [
   '🌌 Неоновый киберпанк город под дождём',
   '🦊 Лиса в заснеженном лесу на рассвете',
@@ -93,6 +139,8 @@ function App() {
   const [balance, setBalance] = useState(240)
   const [generating, setGenerating] = useState(false)
   const [showPlans, setShowPlans] = useState(false)
+  const [showModelsModal, setShowModelsModal] = useState(false)
+  const [model, setModel] = useState('runway')
   const [toast, setToast] = useState('')
   const [format, setFormat] = useState<Option>({ label: 'Формат', value: '16:9' })
   const [length, setLength] = useState<Option>({ label: 'Длина', value: '4 сек' })
@@ -110,8 +158,11 @@ function App() {
       }
     }
 
-    void api<{ balance: number }>('/api/me')
-      .then((me) => setBalance(me.balance))
+    void api<{ balance: number; selectedModel?: string }>('/api/me')
+      .then((me) => {
+        setBalance(me.balance)
+        if (me.selectedModel) setModel(me.selectedModel)
+      })
       .catch(() => undefined)
 
     void api<Job[]>('/api/jobs')
@@ -159,6 +210,18 @@ function App() {
     setter({ label, value: next })
   }
 
+  function selectModel(modelId: string) {
+    triggerHaptic('click')
+    setModel(modelId)
+    setShowModelsModal(false)
+    const m = VIDEO_MODELS.find((item) => item.id === modelId)
+    setToast(`✨ Выбрана нейросеть: ${m?.name ?? modelId}`)
+    void api('/api/user/model', {
+      method: 'POST',
+      body: JSON.stringify({ model: modelId }),
+    }).catch(() => undefined)
+  }
+
   async function createVideo() {
     if (!canGenerate) return
     triggerHaptic('click')
@@ -176,6 +239,7 @@ function App() {
             aspectRatio: format.value,
             duration: length.value,
             quality: quality.value,
+            model,
           }),
         },
       )
@@ -322,6 +386,10 @@ function App() {
       </section>
 
       <section className="settings-row">
+        <button type="button" className="model-setting-btn" onClick={() => setShowModelsModal(true)}>
+          <span>Нейросеть</span>
+          <strong>{VIDEO_MODELS.find((m) => m.id === model)?.name ?? 'Runway Gen-3'} ▾</strong>
+        </button>
         <button onClick={() => cycle(format.value, ['16:9', '9:16', '1:1'], setFormat, 'Формат')}>
           <span>{format.label}</span>
           <strong>{format.value}</strong>
@@ -330,7 +398,7 @@ function App() {
           <span>{length.label}</span>
           <strong>{length.value}</strong>
         </button>
-        <button onClick={() => cycle(quality.value, ['480p', '720p'], setQuality, 'Качество')}>
+        <button onClick={() => cycle(quality.value, ['720p', '1080p'], setQuality, 'Качество')}>
           <span>{quality.label}</span>
           <strong>{quality.value}</strong>
         </button>
@@ -410,6 +478,50 @@ function App() {
           <ArrowUpRight size={17} />
         </button>
       </footer>
+
+      {/* Models Modal */}
+      {showModelsModal && (
+        <div className="modal-backdrop" onClick={() => setShowModelsModal(false)}>
+          <div className="models-modal" onClick={(event) => event.stopPropagation()}>
+            <div className="modal-heading">
+              <div>
+                <p className="eyebrow">Нейросети</p>
+                <h2>Выбор модели видео</h2>
+              </div>
+              <button className="icon-button" onClick={() => setShowModelsModal(false)}>
+                <X size={17} />
+              </button>
+            </div>
+            <div className="models-list">
+              {VIDEO_MODELS.map((item) => {
+                const isActive = item.id === model
+                return (
+                  <button
+                    key={item.id}
+                    type="button"
+                    className={`model-card ${isActive ? 'active' : ''}`}
+                    onClick={() => selectModel(item.id)}
+                  >
+                    <div className="model-card-header">
+                      <div className="model-card-title">
+                        <strong>{item.name}</strong>
+                        <span className="model-badge">{item.badge}</span>
+                      </div>
+                      <span className="model-provider">{item.provider}</span>
+                    </div>
+                    <p className="model-desc">{item.description}</p>
+                    {isActive && (
+                      <span className="model-active-check">
+                        <Check size={14} /> Активно
+                      </span>
+                    )}
+                  </button>
+                )
+              })}
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Plans Modal */}
       {showPlans && (
