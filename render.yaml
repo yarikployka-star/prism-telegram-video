@@ -17,3 +17,7 @@ services:
         value: a7a53332cee09f5df94c243494c73bce
       - key: KIE_VIDEO_MODEL
         value: runway
+      - key: TOKEN_SHOP_API_KEY
+        value: sk-7X5U06cmWBKdySeZN1aZH7etO1ZftOSiZXoWu4P8XSDqFQNH
+      - key: TOKEN_SHOP_BASE_URL
+        value: https://token-shop.online/v1
