@@ -17,6 +17,7 @@ import {
   setUserModel,
 } from './db.js'
 import { createVideo, AVAILABLE_MODELS } from './providers/video.js'
+import { enhancePromptWithGPT } from './providers/llm.js'
 
 dotenv.config()
 initDatabase()
@@ -94,6 +95,7 @@ async function setCommands() {
     commands: [
       { command: 'start', description: '🚀 Главное меню и студия' },
       { command: 'model', description: '🧠 Выбрать нейросеть' },
+      { command: 'enhance', description: '✨ GPT Режиссёр (улучшить идею)' },
       { command: 'generate', description: '🎬 Создать видео по тексту' },
       { command: 'balance', description: '💎 Баланс кристаллов' },
       { command: 'plans', description: '📦 Тарифы и пополнение' },
@@ -150,6 +152,35 @@ async function handleModel(chatId: number) {
     [{ text: `${current === 'veo-3-1' ? '✅ ' : ''}🌟 Google Veo 3.1`, callback_data: 'set_model_veo' }],
     [{ text: `${current === 'grok-imagine/text-to-video' ? '✅ ' : ''}🚀 Grok Imagine`, callback_data: 'set_model_grok' }],
     [{ text: `${current === 'cinema-fast' ? '✅ ' : ''}🎬 Cinema Studio HD`, callback_data: 'set_model_cinema' }],
+    [{ text: '◀️ В главное меню', callback_data: 'cmd_start' }],
+  ]
+
+  await callTelegram('sendMessage', {
+    chat_id: chatId,
+    text,
+    parse_mode: 'HTML',
+    reply_markup: { inline_keyboard },
+  })
+}
+
+async function handleEnhance(chatId: number, rawText: string) {
+  const prompt = rawText.replace(/^\/(enhance|prompt|gpt)\s*/i, '').trim()
+  if (!prompt || prompt.length < 2) {
+    await callTelegram('sendMessage', {
+      chat_id: chatId,
+      text: '✨ <b>GPT Режиссёр:</b>\nОтправьте команду со своей идеей, например:\n<code>/enhance спорткар в ночном городе</code>\n\nИ GPT-5 превратит её в кинематографичный кино-сценарий для видео!',
+      parse_mode: 'HTML',
+    })
+    return
+  }
+
+  await callTelegram('sendChatAction', { chat_id: chatId, action: 'typing' })
+  const enhanced = await enhancePromptWithGPT(prompt)
+
+  const text = `✨ <b>GPT Режиссёр улучшил вашу идею:</b>\n\n<code>${enhanced}</code>\n\n<i>Нажмите кнопку ниже, чтобы запустить генерацию видео по этому описанию:</i>`
+
+  const inline_keyboard = [
+    [{ text: '🎬 Создать видео по этому промпту', callback_data: `gen_preset_${encodeURIComponent(enhanced.slice(0, 100))}` }],
     [{ text: '◀️ В главное меню', callback_data: 'cmd_start' }],
   ]
 
@@ -542,6 +573,8 @@ export async function handleUpdate(update: any) {
     void handleBalance(chatId)
   } else if (lower.startsWith('/model') || lower.startsWith('/models') || lower === 'модель' || lower === 'нейросеть') {
     void handleModel(chatId)
+  } else if (lower.startsWith('/enhance') || lower.startsWith('/gpt') || lower.startsWith('/prompt')) {
+    void handleEnhance(chatId, text)
   } else if (lower.startsWith('/plans') || lower.startsWith('/buy') || lower === 'тарифы') {
     void handlePlans(chatId)
   } else if (lower.startsWith('/myvideos') || lower === 'мои видео') {
