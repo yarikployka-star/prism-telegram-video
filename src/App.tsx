@@ -67,6 +67,27 @@ export type ModelOption = {
 
 export const VIDEO_MODELS: ModelOption[] = [
   {
+    id: 'fal-ai/ltx-video',
+    name: 'LTX Video (Fal.ai)',
+    provider: 'Lightricks / fal.ai',
+    badge: 'Новинка',
+    description: 'Ультра-быстрая генерация HD видео 25 FPS без водяных знаков',
+  },
+  {
+    id: 'fal-ai/minimax/video-01',
+    name: 'Hailuo 01 (Fal.ai)',
+    provider: 'MiniMax / fal.ai',
+    badge: 'Кино-качество',
+    description: 'Выразительная кинематографичная анимация сцен и персонажей',
+  },
+  {
+    id: 'fal-ai/kling-video/v1/standard/text-to-video',
+    name: 'Kling Video (Fal.ai)',
+    provider: 'Kuaishou / fal.ai',
+    badge: 'Топ-динамика',
+    description: 'Плавная реалистичная физика и кинематографичный свет',
+  },
+  {
     id: 'runway',
     name: 'Runway Gen-3',
     provider: 'Runway AI',
@@ -74,32 +95,18 @@ export const VIDEO_MODELS: ModelOption[] = [
     description: 'Голливудская кинематография, ультра-плавная физика и реалистичный свет',
   },
   {
-    id: 'hailuo/02-text-to-video-standard',
-    name: 'Hailuo 02',
-    provider: 'MiniMax',
-    badge: 'Живая динамика',
-    description: 'Выразительные персонажи, сложные движения камеры и высокая детализация',
-  },
-  {
     id: 'veo-3-1',
     name: 'Google Veo 3.1',
     provider: 'Google DeepMind',
-    badge: 'Новинка',
+    badge: 'Премиум',
     description: 'Флагманская видео-модель от Google с глубоким пониманием промпта',
-  },
-  {
-    id: 'grok-imagine/text-to-video',
-    name: 'Grok Imagine',
-    provider: 'xAI',
-    badge: 'Креатив',
-    description: 'Быстрая стильная генерация с яркими визуальными эффектами',
   },
   {
     id: 'cinema-fast',
     name: 'Cinema Studio HD',
-    provider: 'Prism Engine',
+    provider: 'Prism + GPT-Image',
     badge: 'Без ожидания',
-    description: 'Мгновенный синтез 25 FPS без водяных знаков и очередей',
+    description: 'Мгновенный синтез через GPT-4o и динамическую кинокамеру 25 FPS',
   },
 ]
 

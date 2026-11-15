@@ -177,20 +177,22 @@ async function handleModel(chatId: number) {
 
 Активная модель: <b>${getModelDisplayName(current)}</b>
 
-⚡ <b>Runway Gen-3</b> — голливудский кинематограф, реалистичный свет и плавное движение
-🔥 <b>Hailuo 02</b> — выразительная мимика, динамичные сцены и сложные полеты камеры
-🌟 <b>Google Veo 3.1</b> — новейшая видео-модель от Google DeepMind
-🚀 <b>Grok Imagine</b> — быстрая стильная генерация от xAI
-🎬 <b>Cinema Studio HD</b> — мгновенный рендер без ожидания и без водяных знаков
+⚡ <b>LTX Video (fal.ai)</b> — новейшая быстрая генерация HD видео 25 FPS
+🔥 <b>Hailuo 01 (fal.ai)</b> — выразительная кинематографичная анимация
+🎬 <b>Kling Video (fal.ai)</b> — продвинутая физика движения и динамика
+🌟 <b>Runway Gen-3</b> — голливудский кинематограф (Kie.ai)
+✨ <b>Google Veo 3.1</b> — флагманская видео-модель от Google
+🎥 <b>Cinema Studio HD</b> — мгновенный синтез через GPT-4o без водяных знаков
 
 <i>Нажмите на модель, чтобы переключить:</i>`
 
   const inline_keyboard = [
-    [{ text: `${current === 'runway' ? '✅ ' : ''}⚡ Runway Gen-3`, callback_data: 'set_model_runway' }],
-    [{ text: `${current === 'hailuo/02-text-to-video-standard' ? '✅ ' : ''}🔥 Hailuo 02 Standard`, callback_data: 'set_model_hailuo' }],
-    [{ text: `${current === 'veo-3-1' ? '✅ ' : ''}🌟 Google Veo 3.1`, callback_data: 'set_model_veo' }],
-    [{ text: `${current === 'grok-imagine/text-to-video' ? '✅ ' : ''}🚀 Grok Imagine`, callback_data: 'set_model_grok' }],
-    [{ text: `${current === 'cinema-fast' ? '✅ ' : ''}🎬 Cinema Studio HD`, callback_data: 'set_model_cinema' }],
+    [{ text: `${current === 'fal-ai/ltx-video' ? '✅ ' : ''}⚡ LTX Video (fal.ai)`, callback_data: 'set_model_fal_ltx' }],
+    [{ text: `${current === 'fal-ai/minimax/video-01' ? '✅ ' : ''}🔥 Hailuo 01 (fal.ai)`, callback_data: 'set_model_fal_hailuo' }],
+    [{ text: `${current === 'fal-ai/kling-video/v1/standard/text-to-video' ? '✅ ' : ''}🎬 Kling (fal.ai)`, callback_data: 'set_model_fal_kling' }],
+    [{ text: `${current === 'runway' ? '✅ ' : ''}🌟 Runway Gen-3`, callback_data: 'set_model_runway' }],
+    [{ text: `${current === 'veo-3-1' ? '✅ ' : ''}✨ Google Veo 3.1`, callback_data: 'set_model_veo' }],
+    [{ text: `${current === 'cinema-fast' ? '✅ ' : ''}🎥 Cinema Studio HD (GPT)`, callback_data: 'set_model_cinema' }],
     [{ text: '◀️ В главное меню', callback_data: 'cmd_start' }],
   ]
 
@@ -643,8 +645,11 @@ async function handleCallback(callback: {
     await handleStart(chatId, { id: chatId, first_name: callback.from.first_name })
   } else if (data.startsWith('set_model_')) {
     const rawModelKey = data.replace('set_model_', '')
-    let chosenModel = 'runway'
-    if (rawModelKey === 'runway') chosenModel = 'runway'
+    let chosenModel = 'fal-ai/ltx-video'
+    if (rawModelKey === 'fal_ltx') chosenModel = 'fal-ai/ltx-video'
+    else if (rawModelKey === 'fal_hailuo') chosenModel = 'fal-ai/minimax/video-01'
+    else if (rawModelKey === 'fal_kling') chosenModel = 'fal-ai/kling-video/v1/standard/text-to-video'
+    else if (rawModelKey === 'runway') chosenModel = 'runway'
     else if (rawModelKey === 'hailuo') chosenModel = 'hailuo/02-text-to-video-standard'
     else if (rawModelKey === 'veo') chosenModel = 'veo-3-1'
     else if (rawModelKey === 'grok') chosenModel = 'grok-imagine/text-to-video'

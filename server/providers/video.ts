@@ -3,6 +3,7 @@ import path from 'node:path'
 import cp from 'node:child_process'
 import dotenv from 'dotenv'
 import ffmpegPath from 'ffmpeg-static'
+import { generateGptImage } from './image.js'
 
 dotenv.config()
 
@@ -17,43 +18,51 @@ export interface VideoModelInfo {
 
 export const AVAILABLE_MODELS: VideoModelInfo[] = [
   {
-    id: 'runway',
-    name: 'Runway Gen-3',
-    provider: 'Runway AI',
-    badge: 'Кино-качество',
-    description: 'Голливудская кинематография, ультра-плавная физика и реалистичный свет',
-    costCredits: 12,
+    id: 'fal-ai/ltx-video',
+    name: 'LTX Video (Fal.ai)',
+    provider: 'Lightricks / fal.ai',
+    badge: 'Новинка',
+    description: 'Ультра-быстрая генерация HD видео 25 FPS без водяных знаков',
+    costCredits: 5,
   },
   {
-    id: 'hailuo/02-text-to-video-standard',
-    name: 'Hailuo 02 Standard',
-    provider: 'MiniMax',
-    badge: 'Живая динамика',
-    description: 'Выразительные персонажи, сложные пролеты камеры и высокая детализация',
-    costCredits: 30,
+    id: 'fal-ai/minimax/video-01',
+    name: 'Hailuo 01 (Fal.ai)',
+    provider: 'MiniMax / fal.ai',
+    badge: 'Кино-качество',
+    description: 'Выразительная кинематографичная анимация сцен и персонажей',
+    costCredits: 15,
+  },
+  {
+    id: 'fal-ai/kling-video/v1/standard/text-to-video',
+    name: 'Kling Video (Fal.ai)',
+    provider: 'Kuaishou / fal.ai',
+    badge: 'Топ-динамика',
+    description: 'Плавная реалистичная физика и кинематографичный свет',
+    costCredits: 20,
+  },
+  {
+    id: 'runway',
+    name: 'Runway Gen-3 (Kie)',
+    provider: 'Runway AI',
+    badge: 'Голливуд',
+    description: 'Голливудская кинематография, ультра-плавная физика и свет',
+    costCredits: 12,
   },
   {
     id: 'veo-3-1',
     name: 'Google Veo 3.1',
     provider: 'Google DeepMind',
-    badge: 'Новинка',
+    badge: 'Премиум',
     description: 'Флагманская видео-модель от Google с глубоким пониманием промпта',
     costCredits: 30,
   },
   {
-    id: 'grok-imagine/text-to-video',
-    name: 'Grok Imagine',
-    provider: 'xAI',
-    badge: 'Креатив',
-    description: 'Быстрая стильная генерация с яркими визуальными эффектами',
-    costCredits: 20,
-  },
-  {
     id: 'cinema-fast',
     name: 'Cinema Studio HD',
-    provider: 'Prism Engine',
+    provider: 'Prism + GPT-Image',
     badge: 'Без ожидания',
-    description: 'Мгновенный синтез 25 FPS без водяных знаков и очередей',
+    description: 'Мгновенный синтез через GPT-4o и динамическую кинокамеру 25 FPS',
     costCredits: 0,
   },
 ]
@@ -99,36 +108,22 @@ export function parseDuration(durationStr = '8 сек'): number {
  * Image scene fetcher without watermarks
  */
 async function fetchSceneImage(prompt: string, width: number, height: number): Promise<Buffer> {
-  const seed = Math.floor(Math.random() * 1_000_000)
-  const encoded = encodeURIComponent(prompt)
-
-  // 1. Try Pollinations Flux with nologo=true
+  // 1. First priority: High-res GPT-Image-2 via Token Shop (100% clean, no watermarks)
   try {
-    const url1 = `https://image.pollinations.ai/prompt/${encoded}?width=${width}&height=${height}&nologo=true&nofeed=true&seed=${seed}`
-    const res1 = await fetch(url1, {
-      headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)' },
-      signal: AbortSignal.timeout(12_000),
-    })
-    if (res1.ok) {
-      const buf = Buffer.from(await res1.arrayBuffer())
+    const tempId = `scene_${Date.now()}_${Math.random().toString(36).substring(7)}`
+    const gptRes = await generateGptImage(tempId, prompt)
+    if (gptRes.filePath && fs.existsSync(gptRes.filePath)) {
+      const buf = fs.readFileSync(gptRes.filePath)
+      try {
+        fs.unlinkSync(gptRes.filePath)
+      } catch {}
       if (buf.length > 5000) return buf
     }
-  } catch {}
+  } catch (err) {
+    console.warn('[SceneImage] GPT-Image fallback error:', err)
+  }
 
-  // 2. Try Pollinations Sana with nologo=true
-  try {
-    const url2 = `https://image.pollinations.ai/prompt/${encoded}?model=sana&nologo=true&nofeed=true&seed=${seed}`
-    const res2 = await fetch(url2, {
-      headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)' },
-      signal: AbortSignal.timeout(12_000),
-    })
-    if (res2.ok) {
-      const buf = Buffer.from(await res2.arrayBuffer())
-      if (buf.length > 5000) return buf
-    }
-  } catch {}
-
-  // 3. Fallback: procedural cinematic background via FFmpeg
+  // 2. Procedural cinematic background via FFmpeg
   if (ffmpegPath) {
     const tempFallback = path.join(STORAGE_DIR, `fallback_${Date.now()}.jpg`)
     try {
@@ -358,21 +353,167 @@ export async function generateKieVideo(
 }
 
 /**
+ * Real AI Video Generation via fal.ai (LTX Video, Minimax Hailuo, Kling)
+ * High-definition MP4 directly from state-of-the-art video models without watermarks.
+ */
+export async function generateFalVideo(
+  jobId: string,
+  prompt: string,
+  options: VideoOptions = {},
+): Promise<VideoResult> {
+  const falKey = process.env.FAL_KEY?.trim() || 'fal_sk_ee4e7dfee3da494585b0165717427971:cf653db9158fc174f998fb2f81c8b0f2'
+  const model = options.model?.trim() || 'fal-ai/ltx-video'
+  const aspectRatio = options.aspectRatio || '16:9'
+
+  console.log(`[fal.ai] Submitting video job for model "${model}" with prompt: "${prompt.slice(0, 50)}..."`)
+
+  let payload: Record<string, unknown> = { prompt }
+  if (model.includes('ltx-video')) {
+    payload = {
+      prompt,
+      aspect_ratio: aspectRatio === '9:16' ? '9:16' : aspectRatio === '1:1' ? '1:1' : '16:9',
+      num_frames: 49,
+    }
+  } else if (model.includes('kling')) {
+    payload = {
+      prompt,
+      aspect_ratio: aspectRatio === '9:16' ? '9:16' : aspectRatio === '1:1' ? '1:1' : '16:9',
+      duration: '5',
+    }
+  } else if (model.includes('minimax')) {
+    payload = {
+      prompt,
+      prompt_optimizer: true,
+    }
+  }
+
+  const submitRes = await fetch(`https://queue.fal.run/${model}`, {
+    method: 'POST',
+    headers: {
+      Authorization: `Key ${falKey}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify(payload),
+  })
+
+  if (!submitRes.ok) {
+    const errText = await submitRes.text().catch(() => '')
+    if (submitRes.status === 403 || errText.includes('Exhausted balance')) {
+      throw new Error(
+        'Баланс fal.ai пуст (0$). Чтобы активировать генерацию видео, пополните баланс на сумму от 1$ в личном кабинете https://fal.ai/dashboard/billing или переключитесь на генерацию картинок 🎨!',
+      )
+    }
+    throw new Error(`fal.ai HTTP error ${submitRes.status}: ${errText}`)
+  }
+
+  const queueData = (await submitRes.json()) as {
+    request_id?: string
+    status_url?: string
+    response_url?: string
+  }
+
+  const requestId = queueData.request_id
+  if (!requestId) {
+    throw new Error('fal.ai не вернул request_id для задачи')
+  }
+
+  console.log(`[fal.ai] Task queued with ID: ${requestId}. Polling status...`)
+
+  const maxAttempts = 60
+  let videoUrl: string | null = null
+
+  for (let attempt = 0; attempt < maxAttempts; attempt++) {
+    await new Promise((r) => setTimeout(r, 3000))
+
+    const statusRes = await fetch(
+      queueData.status_url || `https://queue.fal.run/${model}/requests/${requestId}/status`,
+      {
+        headers: {
+          Authorization: `Key ${falKey}`,
+        },
+      },
+    )
+
+    if (!statusRes.ok) continue
+
+    const statusData = (await statusRes.json()) as { status: string; error?: string }
+
+    if (statusData.status === 'COMPLETED') {
+      const resultRes = await fetch(
+        queueData.response_url || `https://queue.fal.run/${model}/requests/${requestId}`,
+        {
+          headers: {
+            Authorization: `Key ${falKey}`,
+          },
+        },
+      )
+      if (resultRes.ok) {
+        const resultData = (await resultRes.json()) as any
+        videoUrl =
+          resultData.video?.url ||
+          resultData.videos?.[0]?.url ||
+          resultData.output?.url ||
+          null
+      }
+      break
+    } else if (statusData.status === 'FAILED') {
+      throw new Error(`fal.ai ошибка: ${statusData.error || 'Сбой генерации'}`)
+    }
+  }
+
+  if (!videoUrl) {
+    throw new Error('fal.ai таймаут ожидания готовности видео')
+  }
+
+  const outPath = path.join(STORAGE_DIR, `${jobId}.mp4`)
+  console.log(`[fal.ai] Video ready: ${videoUrl}, downloading to ${outPath}...`)
+
+  const videoFetch = await fetch(videoUrl)
+  if (!videoFetch.ok) {
+    throw new Error(`Не удалось скачать видео с fal.ai: HTTP ${videoFetch.status}`)
+  }
+
+  const arrayBuffer = await videoFetch.arrayBuffer()
+  fs.writeFileSync(outPath, Buffer.from(arrayBuffer))
+
+  return {
+    status: 'completed',
+    videoUrl: `/videos/${jobId}.mp4`,
+    filePath: outPath,
+    provider: `fal.ai (${model})`,
+  }
+}
+
+/**
  * Universal video generation router:
  * - If model === 'cinema-fast': uses built-in Cinema Studio HD engine (zero watermark, instant)
+ * - If model starts with 'fal-ai/': uses fal.ai API
  * - Otherwise: uses modern diffusion models on Kie.ai (Runway Gen-3, Hailuo, Veo)
- * - If Kie.ai credits run out, gracefully falls back to Cinema Studio HD without breaking user experience
+ * - Graceful fallback to clean Cinema Studio HD if external APIs fail or are exhausted
  */
 export async function createVideo(
   jobId: string,
   prompt: string,
   options: VideoOptions = {},
 ): Promise<VideoResult> {
-  const model = options.model?.trim() || 'runway'
+  const model = options.model?.trim() || 'fal-ai/ltx-video'
 
   if (model === 'cinema-fast') {
     console.log(`[Video] Generating via Cinema Studio HD for job ${jobId}...`)
     return await generateCinematicVideo(jobId, prompt, options)
+  }
+
+  if (model.startsWith('fal-ai/')) {
+    try {
+      console.log(`[Video] Generating via fal.ai (${model}) for job ${jobId}...`)
+      return await generateFalVideo(jobId, prompt, options)
+    } catch (err) {
+      console.warn(`[Video] fal.ai error:`, err instanceof Error ? err.message : err)
+      console.log(`[Video] Falling back to clean Cinema Studio HD...`)
+      const res = await generateCinematicVideo(jobId, prompt, options)
+      res.provider = `${res.provider} (fallback)`
+      return res
+    }
   }
 
   const kieKey = process.env.KIE_API_KEY?.trim() || 'a7a53332cee09f5df94c243494c73bce'
