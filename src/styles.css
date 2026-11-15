@@ -177,3 +177,26 @@
 .model-setting-btn strong {
   color: #718a2a;
 }
+
+.enhance-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  color: #718a2a;
+  font-weight: 700;
+  font-size: 11px;
+  padding: 5px 12px;
+  border-radius: 99px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+.enhance-btn:hover:not(:disabled) {
+  border-color: #718a2a;
+  background: color-mix(in srgb, var(--accent) 15%, var(--surface));
+}
+.enhance-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
