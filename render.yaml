@@ -10,8 +10,10 @@ services:
       - key: NODE_ENV
         value: production
       - key: TELEGRAM_BOT_TOKEN
-        sync: false
+        value: 9281505839:AAHJ6TDUOfMdZ29-vo6k1uFRHqllVFoIPps
       - key: MINI_APP_URL
-        sync: false
-      - key: POLLINATIONS_API_KEY
-        sync: false
+        value: https://prism-telegram-video.onrender.com/
+      - key: KIE_API_KEY
+        value: a7a53332cee09f5df94c243494c73bce
+      - key: KIE_VIDEO_MODEL
+        value: runway
