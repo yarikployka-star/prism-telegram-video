@@ -19,7 +19,7 @@ import {
   createPayment,
 } from './db.js'
 import { createVideo } from './providers/video.js'
-import { startBot } from './bot.js'
+import { startBot, handleUpdate } from './bot.js'
 
 dotenv.config()
 initDatabase()
@@ -208,6 +208,18 @@ app.post('/api/payments', (req, res) => {
   res.status(201).json({ id: paymentId, provider, status: 'pending' })
 })
 
+// Telegram webhook endpoint for cloud deployments (Render)
+app.post('/api/telegram-webhook', async (req, res) => {
+  res.sendStatus(200)
+  if (req.body) {
+    try {
+      await handleUpdate(req.body)
+    } catch (err) {
+      console.error('[Webhook] handleUpdate error:', err)
+    }
+  }
+})
+
 // Serve compiled React frontend in production / standalone mode
 const distDir = path.resolve('dist')
 if (fs.existsSync(distDir)) {
@@ -221,9 +233,23 @@ if (fs.existsSync(distDir)) {
 }
 
 const port = Number(process.env.PORT || process.env.API_PORT || 3001)
-app.listen(port, '0.0.0.0', () => {
+app.listen(port, '0.0.0.0', async () => {
   console.log(`Prism unified server running on http://0.0.0.0:${port}`)
-  if (process.env.START_BOT !== 'false') {
+
+  const botToken = process.env.TELEGRAM_BOT_TOKEN
+  const publicUrl = process.env.RENDER_EXTERNAL_URL || (process.env.RENDER ? 'https://prism-telegram-video.onrender.com' : '')
+
+  if (botToken && publicUrl) {
+    const webhookUrl = `${publicUrl}/api/telegram-webhook`
+    console.log(`[Webhook] Configuring Telegram Webhook: ${webhookUrl}`)
+    try {
+      const res = await fetch(`https://api.telegram.org/bot${botToken}/setWebhook?url=${encodeURIComponent(webhookUrl)}&drop_pending_updates=false`)
+      const data = await res.json()
+      console.log(`[Webhook] setWebhook response:`, data)
+    } catch (err) {
+      console.error('[Webhook] setWebhook failed:', err)
+    }
+  } else if (process.env.START_BOT !== 'false') {
     startBot()
   }
 })
