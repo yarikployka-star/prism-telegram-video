@@ -45,11 +45,13 @@ type Job = {
   id: string
   prompt: string
   status: 'completed' | 'processing' | 'failed'
+  type?: 'image' | 'video'
   date: string
-  duration: string
+  duration?: string
   aspectRatio?: string
   quality?: string
   videoUrl?: string
+  imageUrl?: string
   provider?: string
 }
 
@@ -141,12 +143,14 @@ function App() {
   const [showPlans, setShowPlans] = useState(false)
   const [showModelsModal, setShowModelsModal] = useState(false)
   const [model, setModel] = useState('runway')
+  const [mode, setMode] = useState<'image' | 'video'>('image')
   const [enhancing, setEnhancing] = useState(false)
   const [toast, setToast] = useState('')
-  const [format, setFormat] = useState<Option>({ label: 'Формат', value: '16:9' })
+  const [format, setFormat] = useState<Option>({ label: 'Формат', value: '1:1' })
   const [length, setLength] = useState<Option>({ label: 'Длина', value: '4 сек' })
   const [quality, setQuality] = useState<Option>({ label: 'Качество', value: '720p' })
   const [previewJob, setPreviewJob] = useState<Job | null>(null)
+  const [previewImage, setPreviewImage] = useState<Job | null>(null)
 
   // Initialize Telegram WebApp and fetch initial state
   useEffect(() => {
@@ -159,10 +163,11 @@ function App() {
       }
     }
 
-    void api<{ balance: number; selectedModel?: string }>('/api/me')
+    void api<{ balance: number; selectedModel?: string; currentMode?: 'image' | 'video' }>('/api/me')
       .then((me) => {
         setBalance(me.balance)
         if (me.selectedModel) setModel(me.selectedModel)
+        if (me.currentMode) setMode(me.currentMode)
       })
       .catch(() => undefined)
 
@@ -202,7 +207,18 @@ function App() {
     else if (type === 'error') tg.notificationOccurred('error')
   }
 
-  const canGenerate = prompt.trim().length >= 3 && balance >= 24 && !generating
+  function switchMode(newMode: 'image' | 'video') {
+    triggerHaptic('click')
+    setMode(newMode)
+    setFormat(newMode === 'image' ? { label: 'Формат', value: '1:1' } : { label: 'Формат', value: '16:9' })
+    void api('/api/user/mode', {
+      method: 'POST',
+      body: JSON.stringify({ mode: newMode }),
+    }).catch(() => undefined)
+  }
+
+  const requiredBalance = mode === 'image' ? 12 : 24
+  const canGenerate = prompt.trim().length >= 2 && balance >= requiredBalance && !generating
   const completedCount = useMemo(() => jobs.filter((job) => job.status === 'completed').length, [jobs])
 
   const cycle = (current: string, values: string[], setter: (value: Option) => void, label: string) => {
@@ -246,49 +262,75 @@ function App() {
     }
   }
 
-  async function createVideo() {
+  async function createMedia() {
     if (!canGenerate) return
     triggerHaptic('click')
     const submittedPrompt = prompt.trim()
     setGenerating(true)
-    setToast('🎨 Синтезируем сцену и генерируем видео…')
+    setToast(mode === 'image' ? '🎨 GPT-Image создаёт изображение…' : '🎬 Синтезируем сцену и генерируем видео…')
 
     try {
-      const result = await api<{ id: string; status: Job['status']; videoUrl?: string; balance: number }>(
-        '/api/generate',
-        {
-          method: 'POST',
-          body: JSON.stringify({
-            prompt: submittedPrompt,
-            aspectRatio: format.value,
-            duration: length.value,
-            quality: quality.value,
-            model,
-          }),
-        },
-      )
-
-      triggerHaptic('success')
-      setBalance(result.balance)
-      setPrompt('')
-
-      const newJob: Job = {
-        id: result.id,
-        prompt: submittedPrompt,
-        status: result.status,
-        date: 'Только что',
-        duration: length.value,
-        aspectRatio: format.value,
-        quality: quality.value,
-        videoUrl: result.videoUrl,
+      if (mode === 'image') {
+        const result = await api<{ id: string; status: Job['status']; imageUrl?: string; balance: number }>(
+          '/api/generate-image',
+          {
+            method: 'POST',
+            body: JSON.stringify({
+              prompt: submittedPrompt,
+              aspectRatio: format.value,
+            }),
+          },
+        )
+        triggerHaptic('success')
+        setBalance(result.balance)
+        setPrompt('')
+        const newJob: Job = {
+          id: result.id,
+          prompt: submittedPrompt,
+          type: 'image',
+          status: result.status,
+          date: 'Только что',
+          aspectRatio: format.value,
+          imageUrl: result.imageUrl,
+        }
+        setJobs((items) => [newJob, ...items])
+        setToast('🎉 Изображение готово!')
+        setPreviewImage(newJob)
+      } else {
+        const result = await api<{ id: string; status: Job['status']; videoUrl?: string; balance: number }>(
+          '/api/generate',
+          {
+            method: 'POST',
+            body: JSON.stringify({
+              prompt: submittedPrompt,
+              aspectRatio: format.value,
+              duration: length.value,
+              quality: quality.value,
+              model,
+            }),
+          },
+        )
+        triggerHaptic('success')
+        setBalance(result.balance)
+        setPrompt('')
+        const newJob: Job = {
+          id: result.id,
+          prompt: submittedPrompt,
+          type: 'video',
+          status: result.status,
+          date: 'Только что',
+          duration: length.value,
+          aspectRatio: format.value,
+          quality: quality.value,
+          videoUrl: result.videoUrl,
+        }
+        setJobs((items) => [newJob, ...items])
+        setToast('🎉 Видео готово!')
+        setPreviewJob(newJob)
       }
-
-      setJobs((items) => [newJob, ...items])
-      setToast('🎉 Видео готово!')
-      setPreviewJob(newJob)
     } catch (error) {
       triggerHaptic('error')
-      setToast(error instanceof Error ? error.message : 'Не удалось создать видео')
+      setToast(error instanceof Error ? error.message : 'Не удалось создать контент')
     } finally {
       setGenerating(false)
     }
@@ -367,21 +409,57 @@ function App() {
         </div>
       </header>
 
-      <section className="hero">
-        <p className="eyebrow">Создание видео нейросетью</p>
-        <h1>
-          Сделайте идею
-          <br />
-          <em>видимой.</em>
-        </h1>
-        <p className="hero-copy">Опишите сцену — Prism превратит её в короткий кинематографичный MP4-ролик.</p>
+      {/* Mode Switcher: Images (GPT-Image 2) or Videos */}
+      <section className="mode-tabs">
+        <button
+          type="button"
+          className={`mode-tab ${mode === 'image' ? 'active' : ''}`}
+          onClick={() => switchMode('image')}
+        >
+          🎨 Картинки (GPT-Image)
+        </button>
+        <button
+          type="button"
+          className={`mode-tab ${mode === 'video' ? 'active' : ''}`}
+          onClick={() => switchMode('video')}
+        >
+          🎬 Видео (Prism Video)
+        </button>
       </section>
 
-      <section className="composer" aria-label="Создание видео">
+      <section className="hero">
+        <p className="eyebrow">{mode === 'image' ? 'Генерация изображений GPT-Image' : 'Создание видео нейросетью'}</p>
+        <h1>
+          {mode === 'image' ? (
+            <>
+              Сделайте арт
+              <br />
+              <em>шедевром.</em>
+            </>
+          ) : (
+            <>
+              Сделайте идею
+              <br />
+              <em>видимой.</em>
+            </>
+          )}
+        </h1>
+        <p className="hero-copy">
+          {mode === 'image'
+            ? 'Опишите изображение — GPT-Image 2 создаст чистое 4K изображение без водяных знаков.'
+            : 'Опишите сцену — Prism превратит её в короткий кинематографичный MP4-ролик.'}
+        </p>
+      </section>
+
+      <section className="composer" aria-label="Создание">
         <textarea
           value={prompt}
           onChange={(event) => setPrompt(event.target.value)}
-          placeholder="Например: неоновый спорткар мчится по ночному дождливому городу, отражения неоновых вывесок в мокром асфальте…"
+          placeholder={
+            mode === 'image'
+              ? 'Например: неоновый спорткар на закате под дождём, отражения огней в мокром асфальте, 4k, фотореализм…'
+              : 'Например: неоновый спорткар мчится по ночному дождливому городу, отражения неоновых вывесок…'
+          }
           maxLength={500}
         />
         <div className="composer-footer">
@@ -400,7 +478,16 @@ function App() {
 
       {/* Quick Prompt Ideas */}
       <section className="prompt-chips">
-        {PROMPT_SUGGESTIONS.map((preset) => (
+        {(mode === 'image'
+          ? [
+              '🏎️ Неоновый спорткар под дождём',
+              '🦊 Лиса в заснеженном лесу на рассвете',
+              '🌌 Киберпанк мегаполис будущего',
+              '🌊 Океанский прибой на тропическом закате',
+              '🪐 Космонавт на неизведанной планете',
+            ]
+          : PROMPT_SUGGESTIONS
+        ).map((preset) => (
           <button
             key={preset}
             type="button"
@@ -415,35 +502,48 @@ function App() {
         ))}
       </section>
 
-      <section className="settings-row">
-        <button type="button" className="model-setting-btn" onClick={() => setShowModelsModal(true)}>
-          <span>Нейросеть</span>
-          <strong>{VIDEO_MODELS.find((m) => m.id === model)?.name ?? 'Runway Gen-3'} ▾</strong>
-        </button>
-        <button onClick={() => cycle(format.value, ['16:9', '9:16', '1:1'], setFormat, 'Формат')}>
-          <span>{format.label}</span>
-          <strong>{format.value}</strong>
-        </button>
-        <button onClick={() => cycle(length.value, ['4 сек', '8 сек'], setLength, 'Длина')}>
-          <span>{length.label}</span>
-          <strong>{length.value}</strong>
-        </button>
-        <button onClick={() => cycle(quality.value, ['720p', '1080p'], setQuality, 'Качество')}>
-          <span>{quality.label}</span>
-          <strong>{quality.value}</strong>
-        </button>
-      </section>
+      {mode === 'image' ? (
+        <section className="settings-row image-settings">
+          <button onClick={() => cycle(format.value, ['1:1', '16:9', '9:16'], setFormat, 'Формат')}>
+            <span>{format.label}</span>
+            <strong>{format.value}</strong>
+          </button>
+          <button type="button" onClick={() => setToast('Движок: GPT-Image 2 (чистый 4K рендер)')}>
+            <span>Движок</span>
+            <strong>GPT-Image 2</strong>
+          </button>
+        </section>
+      ) : (
+        <section className="settings-row">
+          <button type="button" className="model-setting-btn" onClick={() => setShowModelsModal(true)}>
+            <span>Нейросеть</span>
+            <strong>{VIDEO_MODELS.find((m) => m.id === model)?.name ?? 'Runway Gen-3'} ▾</strong>
+          </button>
+          <button onClick={() => cycle(format.value, ['16:9', '9:16', '1:1'], setFormat, 'Формат')}>
+            <span>{format.label}</span>
+            <strong>{format.value}</strong>
+          </button>
+          <button onClick={() => cycle(length.value, ['4 сек', '8 сек'], setLength, 'Длина')}>
+            <span>{length.label}</span>
+            <strong>{length.value}</strong>
+          </button>
+          <button onClick={() => cycle(quality.value, ['720p', '1080p'], setQuality, 'Качество')}>
+            <span>{quality.label}</span>
+            <strong>{quality.value}</strong>
+          </button>
+        </section>
+      )}
 
       <section className="recent">
         <div className="section-heading">
-          <h2>Созданные видео</h2>
+          <h2>{mode === 'image' ? 'Созданные изображения' : 'Созданные видео'}</h2>
           <span>{completedCount} готово</span>
         </div>
         <div className="job-list">
           {jobs.length === 0 ? (
             <div className="empty-state">
               <Clapperboard size={32} />
-              <p>Здесь появятся ваши сгенерированные видео</p>
+              <p>Здесь появятся ваши сгенерированные работы</p>
             </div>
           ) : (
             jobs.map((job) => (
@@ -451,14 +551,17 @@ function App() {
                 className={`job ${job.status}`}
                 key={job.id}
                 onClick={() => {
-                  if (job.status === 'completed' && job.videoUrl) {
+                  if (job.status === 'completed') {
                     triggerHaptic('click')
-                    setPreviewJob(job)
+                    if (job.imageUrl) setPreviewImage(job)
+                    else if (job.videoUrl) setPreviewJob(job)
                   }
                 }}
               >
                 <div className={`job-thumb ${job.status}`}>
-                  {job.status === 'completed' && job.videoUrl ? (
+                  {job.status === 'completed' && job.imageUrl ? (
+                    <img src={job.imageUrl} alt={job.prompt} className="thumb-img" />
+                  ) : job.status === 'completed' && job.videoUrl ? (
                     <button
                       className="play"
                       onClick={(e) => {
@@ -476,7 +579,7 @@ function App() {
                 <div className="job-info">
                   <p>{job.prompt}</p>
                   <span>
-                    {job.date} · {job.duration}
+                    {job.date} · {job.type === 'image' ? 'Картинка 4K' : job.duration || 'Видео'}
                   </span>
                 </div>
                 <div className={`status ${job.status}`}>
@@ -498,13 +601,15 @@ function App() {
 
       <footer className="create-bar">
         <div>
-          <span>Стоимость видео</span>
+          <span>Стоимость</span>
           <strong>
-            <Coins size={17} />24
+            <Coins size={17} />{requiredBalance}
           </strong>
         </div>
-        <button className="create-button" disabled={!canGenerate} onClick={() => void createVideo()}>
-          {generating ? 'Генерируем MP4…' : 'Создать видео'}
+        <button className="create-button" disabled={!canGenerate} onClick={() => void createMedia()}>
+          {generating
+            ? (mode === 'image' ? 'Рисуем арт…' : 'Генерируем MP4…')
+            : (mode === 'image' ? 'Создать картинку' : 'Создать видео')}
           <ArrowUpRight size={17} />
         </button>
       </footer>
@@ -630,6 +735,48 @@ function App() {
                   type="button"
                   className="action-btn"
                   onClick={() => remixPrompt(previewJob.prompt)}
+                >
+                  <RotateCcw size={15} />
+                  <span>Повторить</span>
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Image Preview & Actions Modal */}
+      {previewImage && previewImage.imageUrl && (
+        <div className="modal-backdrop" onClick={() => setPreviewImage(null)}>
+          <div className="video-modal image-preview-modal" onClick={(event) => event.stopPropagation()}>
+            <button className="icon-button close-video" onClick={() => setPreviewImage(null)}>
+              <X size={17} />
+            </button>
+            <img src={previewImage.imageUrl} alt={previewImage.prompt} className="modal-full-img" />
+            <div className="video-modal-info">
+              <p className="video-modal-prompt">«{previewImage.prompt}»</p>
+              <div className="video-modal-actions">
+                <a
+                  href={previewImage.imageUrl}
+                  download={`prism_art_${previewImage.id}.png`}
+                  className="action-btn download-btn"
+                  onClick={() => triggerHaptic('click')}
+                >
+                  <Download size={15} />
+                  <span>Скачать 4K</span>
+                </a>
+                <button
+                  type="button"
+                  className="action-btn"
+                  onClick={() => copyVideoLink(previewImage.imageUrl)}
+                >
+                  <Copy size={15} />
+                  <span>Ссылка</span>
+                </button>
+                <button
+                  type="button"
+                  className="action-btn"
+                  onClick={() => remixPrompt(previewImage.prompt)}
                 >
                   <RotateCcw size={15} />
                   <span>Повторить</span>
