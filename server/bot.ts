@@ -15,8 +15,11 @@ import {
   createPayment,
   getUserModel,
   setUserModel,
+  getUserMode,
+  setUserMode,
 } from './db.js'
 import { createVideo, AVAILABLE_MODELS } from './providers/video.js'
+import { generateGptImage } from './providers/image.js'
 import { enhancePromptWithGPT } from './providers/llm.js'
 
 dotenv.config()
@@ -85,6 +88,34 @@ async function sendVideo(chatId: number, filePath: string, caption: string, repl
   }
 }
 
+async function sendPhoto(chatId: number, filePath: string, caption: string, replyMarkup?: Record<string, unknown>) {
+  try {
+    const formData = new FormData()
+    formData.append('chat_id', String(chatId))
+    formData.append('caption', caption)
+    formData.append('parse_mode', 'HTML')
+    if (replyMarkup) {
+      formData.append('reply_markup', JSON.stringify(replyMarkup))
+    }
+    const fileBuf = fs.readFileSync(filePath)
+    formData.append('photo', new Blob([fileBuf], { type: 'image/png' }), 'image.png')
+
+    const res = await fetch(`${api}/sendPhoto`, {
+      method: 'POST',
+      body: formData,
+    })
+    const data = await res.json().catch(() => ({}))
+    if (!res.ok) {
+      console.error('sendPhoto failed:', res.status, data)
+      return null
+    }
+    return data
+  } catch (err) {
+    console.error('Error in sendPhoto:', err)
+    return null
+  }
+}
+
 function getModelDisplayName(modelId: string): string {
   const found = AVAILABLE_MODELS.find((m) => m.id === modelId)
   return found ? found.name : 'Runway Gen-3'
@@ -94,12 +125,14 @@ async function setCommands() {
   await callTelegram('setMyCommands', {
     commands: [
       { command: 'start', description: '🚀 Главное меню и студия' },
-      { command: 'model', description: '🧠 Выбрать нейросеть' },
+      { command: 'image', description: '🎨 Создать картинку (GPT-Image)' },
+      { command: 'video', description: '🎬 Создать видео (Prism Video)' },
+      { command: 'mode', description: '🔄 Переключить режим (Картинка / Видео)' },
+      { command: 'model', description: '🧠 Выбрать модель' },
       { command: 'enhance', description: '✨ GPT Режиссёр (улучшить идею)' },
-      { command: 'generate', description: '🎬 Создать видео по тексту' },
       { command: 'balance', description: '💎 Баланс кристаллов' },
       { command: 'plans', description: '📦 Тарифы и пополнение' },
-      { command: 'myvideos', description: '📂 Мои видео' },
+      { command: 'myvideos', description: '📂 Мои генерации' },
       { command: 'help', description: '❓ Помощь и примеры' },
     ],
   })
@@ -107,16 +140,22 @@ async function setCommands() {
 
 function getKeyboard(chatId: number) {
   const userId = `tg_${chatId}`
+  const currentMode = getUserMode(userId)
   const currentModel = getUserModel(userId)
   const currentModelName = getModelDisplayName(currentModel)
   const inline_keyboard: any[][] = []
 
   if (miniAppUrl && /^https:\/\//i.test(miniAppUrl)) {
-    inline_keyboard.push([{ text: '🚀 Открыть студию Prism', web_app: { url: miniAppUrl } }])
+    inline_keyboard.push([{ text: '🚀 Открыть Web-студию Prism', web_app: { url: miniAppUrl } }])
   }
 
+  const modeBtnText = currentMode === 'image' 
+    ? '🎨 Режим: Картинки (переключить на 🎬)' 
+    : '🎬 Режим: Видео (переключить на 🎨)'
+  inline_keyboard.push([{ text: modeBtnText, callback_data: 'toggle_mode' }])
+
   inline_keyboard.push([
-    { text: `🧠 Модель: ${currentModelName}`, callback_data: 'cmd_model' },
+    { text: `🧠 Модель видео: ${currentModelName}`, callback_data: 'cmd_model' },
   ])
   inline_keyboard.push([
     { text: '💎 Баланс', callback_data: 'cmd_balance' },
@@ -124,7 +163,7 @@ function getKeyboard(chatId: number) {
   ])
   inline_keyboard.push([
     { text: '💡 Пример промпта', callback_data: 'cmd_example' },
-    { text: '📂 Мои видео', callback_data: 'cmd_myvideos' },
+    { text: '📂 Мои генерации', callback_data: 'cmd_myvideos' },
   ])
 
   return { inline_keyboard }
@@ -195,17 +234,21 @@ async function handleEnhance(chatId: number, rawText: string) {
 async function handleStart(chatId: number, from: { id: number; first_name?: string }) {
   const userId = `tg_${chatId}`
   const user = getOrCreateUser(userId, chatId, 240)
+  const mode = getUserMode(userId)
 
-  const text = `👋 Привет, <b>${from.first_name || 'творец'}</b>! Я <b>Prism Video AI</b>.
+  const text = `👋 Привет, <b>${from.first_name || 'творец'}</b>! Я <b>Prism AI Studio</b>.
 
-Я превращаю ваши текстовые описания в видеоролики MP4!
+Создавайте профессиональные арты, фото и видео нейросетью!
 
-✨ <b>Как создать видео:</b>
-1️⃣ Откройте <b>Web-студию Prism</b> (кнопка ниже) с предпросмотром, форматами и плеером.
-2️⃣ Или <b>просто напишите мне в чат</b> описание сцены (например: <i>«неоновый спорткар мчится по ночному дождливому Токио»</i>)!
+⚡ <b>2 режима создания:</b>
+🎨 <b>Картинки (GPT-Image 2)</b> — чистые 4K изображения без водяных знаков (12 💎).
+🎬 <b>Видео (Prism Video)</b> — кинематографичные видеоролики MP4 (24 💎).
 
-💎 <b>Ваш баланс:</b> ${user.balance} кристаллов
-🎬 <b>Стоимость генерации:</b> 24 кристалла`
+Текущий активный режим: <b>${mode === 'image' ? '🎨 Картинки (GPT-Image)' : '🎬 Видео (Prism Video)'}</b>
+
+<i>Просто напишите мне в чат текст (например: «неоновый спорткар на закате под дождём»), и нейросеть создаст контент! Или откройте Web-студию ниже.</i>
+
+💎 <b>Ваш баланс:</b> ${user.balance} кристаллов`
 
   await callTelegram('sendMessage', {
     chat_id: chatId,
@@ -322,6 +365,109 @@ async function handleHelp(chatId: number) {
     parse_mode: 'HTML',
     reply_markup: getKeyboard(chatId),
   })
+}
+
+async function handleGenerateImage(chatId: number, rawPrompt: string) {
+  const prompt = rawPrompt.replace(/^\/(image|img|photo|picture|картинка|фото)\s*/i, '').trim()
+  if (prompt.length < 2) {
+    await callTelegram('sendMessage', {
+      chat_id: chatId,
+      text: '🎨 Пожалуйста, опишите изображение (минимум 2 символа).\n\nНапример: <i>«Неоновый спорткар на ночной автостраде под дождём»</i>',
+      parse_mode: 'HTML',
+    })
+    return
+  }
+
+  const userId = `tg_${chatId}`
+  const user = getOrCreateUser(userId, chatId, 240)
+  const charge = 12
+
+  if (user.balance < charge) {
+    await callTelegram('sendMessage', {
+      chat_id: chatId,
+      text: `❌ <b>Недостаточно кристаллов!</b>\n\nТребуется: <b>12 💎</b>\nУ вас: <b>${user.balance} 💎</b>\n\nПополните баланс по кнопке ниже:`,
+      parse_mode: 'HTML',
+      reply_markup: {
+        inline_keyboard: [[{ text: '📦 Пополнить кристаллы', callback_data: 'cmd_plans' }]],
+      },
+    })
+    return
+  }
+
+  deductBalance(userId, charge)
+  const jobId = randomUUID()
+  createJob({
+    id: jobId,
+    userId,
+    prompt,
+    type: 'image',
+    status: 'processing',
+    aspectRatio: '1:1',
+  })
+
+  const statusMsg = await callTelegram('sendMessage', {
+    chat_id: chatId,
+    text: `🎨 <b>Генерирую изображение через GPT-Image 2...</b>\n\n📝 <i>«${prompt}»</i>\n⏳ Рисуем в высоком качестве без водяных знаков...`,
+    parse_mode: 'HTML',
+  })
+  const statusMsgId = statusMsg?.result?.message_id
+
+  void sendChatAction(chatId, 'upload_photo')
+
+  try {
+    const result = await generateGptImage(jobId, prompt)
+    updateJob(jobId, {
+      status: result.status,
+      imageUrl: result.imageUrl,
+      provider: result.provider,
+    })
+
+    const updatedUser = getUser(userId)
+    const caption = `🎨 <b>Изображение готово!</b>\n\n📝 <i>«${prompt}»</i>\n💎 Баланс: <b>${updatedUser?.balance ?? user.balance - charge}</b> кристаллов`
+
+    const replyMarkup = {
+      inline_keyboard: [
+        ...(miniAppUrl && /^https:\/\//i.test(miniAppUrl)
+          ? [[{ text: '🚀 Открыть Web-студию', web_app: { url: miniAppUrl } }]]
+          : []),
+        [
+          { text: '✨ Улучшить идею', callback_data: `enhance_${encodeURIComponent(prompt.slice(0, 30))}` },
+          { text: '🎬 Режим видео', callback_data: 'set_mode_video' },
+        ],
+      ],
+    }
+
+    if (result.filePath && fs.existsSync(result.filePath)) {
+      await sendPhoto(chatId, result.filePath, caption, replyMarkup)
+    } else {
+      await callTelegram('sendMessage', {
+        chat_id: chatId,
+        text: caption,
+        parse_mode: 'HTML',
+        reply_markup: replyMarkup,
+      })
+    }
+
+    if (statusMsgId) {
+      void deleteMessage(chatId, statusMsgId)
+    }
+  } catch (err) {
+    console.error('Image generation error:', err)
+    refundBalance(userId, charge)
+    const errText = err instanceof Error ? err.message : 'Неизвестная ошибка'
+    updateJob(jobId, { status: 'failed', errorMessage: errText })
+
+    if (statusMsgId) {
+      void deleteMessage(chatId, statusMsgId)
+    }
+
+    await callTelegram('sendMessage', {
+      chat_id: chatId,
+      text: `❌ <b>Не удалось создать изображение:</b>\n${errText}\n\n💎 <b>12 кристаллов возвращены</b> на ваш баланс.`,
+      parse_mode: 'HTML',
+      reply_markup: getKeyboard(chatId),
+    })
+  }
 }
 
 async function handleGenerate(chatId: number, rawPrompt: string) {
@@ -461,6 +607,32 @@ async function handleCallback(callback: {
 
   if (data === 'cmd_balance') {
     await handleBalance(chatId)
+  } else if (data === 'toggle_mode') {
+    const current = getUserMode(userId)
+    const next = current === 'image' ? 'video' : 'image'
+    setUserMode(userId, next)
+    await callTelegram('sendMessage', {
+      chat_id: chatId,
+      text: `🔄 <b>Режим переключен:</b> <b>${next === 'image' ? '🎨 Картинки (GPT-Image 2)' : '🎬 Видео (Prism Video)'}</b>\n\nТеперь отправьте текст в чат!`,
+      parse_mode: 'HTML',
+      reply_markup: getKeyboard(chatId),
+    })
+  } else if (data === 'set_mode_image') {
+    setUserMode(userId, 'image')
+    await callTelegram('sendMessage', {
+      chat_id: chatId,
+      text: '🎨 <b>Включен режим создания картинок!</b>\n\nОтправьте в чат описание изображения, и нейросеть создаст арт в высоком разрешении без водяных знаков.',
+      parse_mode: 'HTML',
+      reply_markup: getKeyboard(chatId),
+    })
+  } else if (data === 'set_mode_video') {
+    setUserMode(userId, 'video')
+    await callTelegram('sendMessage', {
+      chat_id: chatId,
+      text: '🎬 <b>Включен режим создания видео!</b>\n\nОтправьте в чат описание сцены, и нейросеть создаст видеоролик.',
+      parse_mode: 'HTML',
+      reply_markup: getKeyboard(chatId),
+    })
   } else if (data === 'cmd_plans') {
     await handlePlans(chatId)
   } else if (data === 'cmd_myvideos') {
@@ -575,14 +747,35 @@ export async function handleUpdate(update: any) {
     void handleModel(chatId)
   } else if (lower.startsWith('/enhance') || lower.startsWith('/gpt') || lower.startsWith('/prompt')) {
     void handleEnhance(chatId, text)
+  } else if (lower.startsWith('/image') || lower.startsWith('/img') || lower.startsWith('/photo') || lower === 'картинка' || lower === 'фото') {
+    void handleGenerateImage(chatId, text)
+  } else if (lower.startsWith('/video') || lower === 'видео') {
+    void handleGenerate(chatId, text)
+  } else if (lower.startsWith('/mode') || lower === 'режим') {
+    const userId = `tg_${chatId}`
+    const current = getUserMode(userId)
+    const next = current === 'image' ? 'video' : 'image'
+    setUserMode(userId, next)
+    void callTelegram('sendMessage', {
+      chat_id: chatId,
+      text: `🔄 <b>Активный режим переключен на:</b> <b>${next === 'image' ? '🎨 Картинки (GPT-Image 2)' : '🎬 Видео (Prism Video)'}</b>`,
+      parse_mode: 'HTML',
+      reply_markup: getKeyboard(chatId),
+    })
   } else if (lower.startsWith('/plans') || lower.startsWith('/buy') || lower === 'тарифы') {
     void handlePlans(chatId)
-  } else if (lower.startsWith('/myvideos') || lower === 'мои видео') {
+  } else if (lower.startsWith('/myvideos') || lower === 'мои видео' || lower === 'галерея') {
     void handleMyVideos(chatId)
   } else if (lower.startsWith('/help') || lower === 'помощь') {
     void handleHelp(chatId)
   } else {
-    void handleGenerate(chatId, text)
+    const userId = `tg_${chatId}`
+    const mode = getUserMode(userId)
+    if (mode === 'image') {
+      void handleGenerateImage(chatId, text)
+    } else {
+      void handleGenerate(chatId, text)
+    }
   }
 }
 
