@@ -442,6 +442,42 @@ async function handleCallback(callback: {
   }
 }
 
+export async function handleUpdate(update: any) {
+  if (update.callback_query) {
+    void handleCallback(update.callback_query)
+    return
+  }
+
+  const msg = update.message
+  if (!msg?.text) return
+
+  const text = msg.text.trim()
+  const chatId = msg.chat.id
+  const from = msg.from ?? { id: chatId, first_name: 'Пользователь' }
+
+  const lower = text.toLowerCase()
+  if (
+    lower.startsWith('/start') ||
+    lower === 'start' ||
+    lower === 'старт' ||
+    lower === 'привет' ||
+    lower === 'hello' ||
+    lower === 'меню'
+  ) {
+    void handleStart(chatId, from)
+  } else if (lower.startsWith('/balance') || lower === 'баланс') {
+    void handleBalance(chatId)
+  } else if (lower.startsWith('/plans') || lower.startsWith('/buy') || lower === 'тарифы') {
+    void handlePlans(chatId)
+  } else if (lower.startsWith('/myvideos') || lower === 'мои видео') {
+    void handleMyVideos(chatId)
+  } else if (lower.startsWith('/help') || lower === 'помощь') {
+    void handleHelp(chatId)
+  } else {
+    void handleGenerate(chatId, text)
+  }
+}
+
 async function poll() {
   console.log('Telegram bot service started. Initializing commands and polling...')
   await setCommands()
@@ -476,33 +512,7 @@ async function poll() {
 
       for (const update of result.result ?? []) {
         offset = update.update_id + 1
-
-        if (update.callback_query) {
-          void handleCallback(update.callback_query)
-          continue
-        }
-
-        const msg = update.message
-        if (!msg?.text) continue
-
-        const text = msg.text.trim()
-        const chatId = msg.chat.id
-        const from = msg.from ?? { id: chatId, first_name: 'Пользователь' }
-
-        if (text.startsWith('/start')) {
-          void handleStart(chatId, from)
-        } else if (text.startsWith('/balance')) {
-          void handleBalance(chatId)
-        } else if (text.startsWith('/plans') || text.startsWith('/buy')) {
-          void handlePlans(chatId)
-        } else if (text.startsWith('/myvideos')) {
-          void handleMyVideos(chatId)
-        } else if (text.startsWith('/help')) {
-          void handleHelp(chatId)
-        } else {
-          // Any other message or /generate is treated as a video prompt!
-          void handleGenerate(chatId, text)
-        }
+        void handleUpdate(update)
       }
     } catch (error) {
       console.error('Telegram polling loop error:', error instanceof Error ? error.message : error)
