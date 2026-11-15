@@ -273,4 +273,19 @@ app.listen(port, '0.0.0.0', async () => {
   } else if (process.env.START_BOT !== 'false') {
     startBot()
   }
+
+  // Keep-alive auto-pinger to prevent Render free tier from sleeping (sleeps after 15 min)
+  const pingTarget = `${(publicUrl || 'https://prism-telegram-video.onrender.com').replace(/\/$/, '')}/api/health`
+  console.log(`[KeepAlive] Anti-sleep ping scheduled for ${pingTarget} every 8 minutes.`)
+  setInterval(async () => {
+    try {
+      const res = await fetch(pingTarget, {
+        headers: { 'User-Agent': 'Prism-KeepAlive/1.0' },
+        signal: AbortSignal.timeout(15_000),
+      })
+      console.log(`[KeepAlive] Ping ${pingTarget}: HTTP ${res.status}`)
+    } catch (err) {
+      console.warn(`[KeepAlive] Ping warning:`, err instanceof Error ? err.message : err)
+    }
+  }, 8 * 60 * 1000)
 })
