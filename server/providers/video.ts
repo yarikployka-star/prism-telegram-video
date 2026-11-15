@@ -265,15 +265,129 @@ export async function generatePollinationsVideo(
 }
 
 /**
+ * Real AI Video Generation via Kie.ai (Runway Gen-3, Kling, Google Veo, Hailuo)
+ */
+export async function generateKieVideo(
+  jobId: string,
+  prompt: string,
+  options: VideoOptions = {},
+): Promise<VideoResult> {
+  const apiKey = process.env.KIE_API_KEY?.trim() || 'a7a53332cee09f5df94c243494c73bce'
+  const model = process.env.KIE_VIDEO_MODEL?.trim() || 'runway'
+  const duration = parseDuration(options.duration)
+  const quality = options.quality?.includes('1080') ? '1080p' : '720p'
+  const aspectRatio = options.aspectRatio || '16:9'
+
+  console.log(`[Kie.ai] Creating video task with model "${model}" for prompt: "${prompt}"...`)
+
+  const payload: any = {
+    model,
+    input: {
+      prompt,
+      duration: duration <= 5 ? 5 : 10,
+      quality,
+      aspect_ratio: aspectRatio,
+    },
+  }
+
+  const res = await fetch('https://api.kie.ai/api/v1/jobs/createTask', {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${apiKey}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify(payload),
+  })
+
+  if (!res.ok) {
+    throw new Error(`Kie.ai HTTP error ${res.status}: ${await res.text().catch(() => '')}`)
+  }
+
+  const data = (await res.json()) as { code: number; msg: string; data?: { taskId: string } }
+  if (data.code !== 200 || !data.data?.taskId) {
+    throw new Error(`Kie.ai task creation failed: ${data.msg || JSON.stringify(data)}`)
+  }
+
+  const taskId = data.data.taskId
+  console.log(`[Kie.ai] Task submitted successfully (ID: ${taskId}), polling for completion...`)
+
+  const outPath = path.join(STORAGE_DIR, `${jobId}.mp4`)
+
+  // Poll for completion (up to ~120s)
+  for (let attempt = 0; attempt < 35; attempt++) {
+    await new Promise((r) => setTimeout(r, 4000))
+    const pollRes = await fetch(`https://api.kie.ai/api/v1/jobs/recordInfo?taskId=${encodeURIComponent(taskId)}`, {
+      headers: { Authorization: `Bearer ${apiKey}` },
+    })
+
+    if (!pollRes.ok) continue
+
+    const pollData = (await pollRes.json().catch(() => ({}))) as {
+      data?: {
+        state: string
+        resultJson?: string
+        errorMessage?: string
+        failMsg?: string
+      }
+    }
+
+    const state = pollData.data?.state
+    console.log(`[Kie.ai] Poll ${attempt + 1}: state = ${state}`)
+
+    if (state === 'success' && pollData.data?.resultJson) {
+      try {
+        const parsedResult = JSON.parse(pollData.data.resultJson) as { resultUrls?: string[] }
+        const videoUrl = parsedResult.resultUrls?.[0]
+        if (videoUrl) {
+          console.log(`[Kie.ai] Video ready! Downloading from: ${videoUrl}`)
+          const videoRes = await fetch(videoUrl)
+          if (videoRes.ok) {
+            const buf = Buffer.from(await videoRes.arrayBuffer())
+            fs.writeFileSync(outPath, buf)
+            return {
+              status: 'completed',
+              videoUrl: `/videos/${jobId}.mp4`,
+              filePath: outPath,
+              provider: `kie-ai (${model})`,
+            }
+          }
+        }
+      } catch (err) {
+        console.error('[Kie.ai] Error parsing resultJson:', err)
+      }
+    }
+
+    if (state === 'fail') {
+      const err = pollData.data?.errorMessage || pollData.data?.failMsg || 'Generation failed on Kie.ai'
+      throw new Error(`Kie.ai generation error: ${err}`)
+    }
+  }
+
+  throw new Error('Kie.ai video generation timed out')
+}
+
+/**
  * Main video generator entry point:
- * - Uses Pollinations paid model if key is provided and functional
- * - Seamlessly uses built-in AI cinematic engine if no key or on provider error
+ * 1. Kie.ai (Runway, Kling, Veo) when KIE_API_KEY is configured
+ * 2. Pollinations when POLLINATIONS_API_KEY is configured
+ * 3. Fast cinematic engine fallback
  */
 export async function createVideo(
   jobId: string,
   prompt: string,
   options: VideoOptions = {},
 ): Promise<VideoResult> {
+  const kieKey = process.env.KIE_API_KEY?.trim() || 'a7a53332cee09f5df94c243494c73bce'
+
+  if (kieKey) {
+    try {
+      console.log(`[Video] Generating via Kie.ai for job ${jobId}...`)
+      return await generateKieVideo(jobId, prompt, options)
+    } catch (err) {
+      console.warn(`[Video] Kie.ai error, falling back to cinematic generator:`, err instanceof Error ? err.message : err)
+    }
+  }
+
   const hasPollinationsKey = Boolean(process.env.POLLINATIONS_API_KEY?.trim())
 
   if (hasPollinationsKey) {
