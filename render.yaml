@@ -21,3 +21,5 @@ services:
         value: sk-7X5U06cmWBKdySeZN1aZH7etO1ZftOSiZXoWu4P8XSDqFQNH
       - key: TOKEN_SHOP_BASE_URL
         value: https://token-shop.online/v1
+      - key: FAL_KEY
+        value: fal_sk_ee4e7dfee3da494585b0165717427971:cf653db9158fc174f998fb2f81c8b0f2
